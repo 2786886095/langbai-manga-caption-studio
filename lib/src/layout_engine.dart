@@ -73,7 +73,7 @@ class LayoutEngine {
           shape: spec?.shape ?? BubbleShape.ellipse,
           tailDirection: spec?.tailDirection ??
               (column == 0 ? TailDirection.downRight : TailDirection.downLeft),
-          fontFamily: spec?.fontFamily ?? 'Microsoft YaHei',
+          fontFamily: normalizeBubbleFontFamily(spec?.fontFamily),
           fontColorValue: spec?.fontColorValue ?? 0xff141518,
           fontSize: spec?.fontSize ?? 34,
           lineHeight: spec?.lineHeight ?? 1.25,

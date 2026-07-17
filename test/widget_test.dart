@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:bubble_caption_studio/src/app.dart';
@@ -15,6 +14,7 @@ import 'package:bubble_caption_studio/src/script_parser.dart';
 import 'package:bubble_caption_studio/src/text_context_menu.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -64,7 +64,7 @@ void main() {
     expect(find.text('全选'), findsOneWidget);
   });
 
-  test('settings preserve export and autosave preferences', () {
+  test('settings preserve export preferences and ignore legacy autosave', () {
     final settings = AppSettings.fromJson({
       'exportDirectory': r'D:\成图',
       'askExportLocation': false,
@@ -74,9 +74,9 @@ void main() {
     });
     expect(settings.exportDirectory, r'D:\成图');
     expect(settings.askExportLocation, isFalse);
-    expect(settings.autoSaveSeconds, 10);
     expect(settings.numberedExportNames, isFalse);
-    expect(AppSettings.fromJson({'autoSaveSeconds': 999}).autoSaveSeconds, 60);
+    expect(settings.toJson(), isNot(contains('autoSave')));
+    expect(settings.toJson(), isNot(contains('autoSaveSeconds')));
   });
 
   test('direct PNG export detects collisions and overwrites only when allowed',
@@ -148,6 +148,57 @@ void main() {
     }
   });
 
+  test('bubble hit testing selects only the actual bubble bounds', () {
+    const caption = CaptionLine(speaker: '', text: '测试');
+    const bubble = BubblePlacement(
+      caption: caption,
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 120,
+    );
+    expect(hitTestBubble(const [bubble], const Offset(150, 150)), 0);
+    expect(hitTestBubble(const [bubble], const Offset(90, 150)), -1);
+    expect(hitTestBubble(const [bubble], const Offset(320, 150)), -1);
+  });
+
+  test('legacy font names map to bundled local fonts', () {
+    expect(normalizeBubbleFontFamily('Microsoft YaHei'), 'Noto Sans SC');
+    expect(normalizeBubbleFontFamily('SimSun'), 'ZCOOL XiaoWei');
+    expect(normalizeBubbleFontFamily('楷体'), 'Ma Shan Zheng');
+    expect(normalizeBubbleFontFamily('Imported_Custom'), 'Imported_Custom');
+  });
+
+  test('bundled Chinese fonts load and produce distinct text metrics',
+      () async {
+    Future<double> measure(String family, String asset) async {
+      final loader = FontLoader(family)..addFont(rootBundle.load(asset));
+      await loader.load();
+      final painter = TextPainter(
+        text: TextSpan(
+          text: '测试漫画气泡字幕',
+          style: TextStyle(fontFamily: family, fontSize: 36),
+        ),
+        textDirection: ui.TextDirection.ltr,
+      )..layout();
+      return painter.width;
+    }
+
+    final widths = <double>{
+      await measure(
+          'Test Noto Sans SC', 'assets/fonts/NotoSansSC-Variable.ttf'),
+      await measure(
+        'Test ZCOOL XiaoWei',
+        'assets/fonts/ZCOOLXiaoWei-Regular.ttf',
+      ),
+      await measure(
+        'Test Ma Shan Zheng',
+        'assets/fonts/MaShanZheng-Regular.ttf',
+      ),
+    };
+    expect(widths.length, greaterThan(1));
+  });
+
   test('precise script controls style while tail anchor stays fixed', () {
     final parsed = parseCaptionScript('''
 [001.png]
@@ -172,7 +223,7 @@ void main() {
     expect(caption.speaker, '小雪');
     expect(caption.layout!.tailDirection, TailDirection.downLeft);
     expect(caption.layout!.shape, BubbleShape.rounded);
-    expect(caption.layout!.fontFamily, 'KaiTi');
+    expect(caption.layout!.fontFamily, 'Ma Shan Zheng');
     expect(caption.layout!.fontColorValue, 0xffd52f4f);
 
     const engine = LayoutEngine();

@@ -111,7 +111,7 @@ enum _BubbleStyleProperty {
 
 SnackBar _quickFeedback(String message) => SnackBar(
       content: Text(message),
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 700),
     );
 
 enum _ExistingImageChoice { overwrite, overwriteAll, skip, cancel }
@@ -155,7 +155,6 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   bool _selectionVisible = true;
   bool _structureDirty = false;
   int _editRevision = 0;
-  Timer? _autosaveTimer;
   AppSettings _settings = const AppSettings();
   final List<String> _importedFonts = [];
   final Map<String, Uint8List> _fontBytes = {};
@@ -181,41 +180,24 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     super.initState();
     _projectName = widget.projectName;
     _loadStoredProject();
-    _loadSettingsAndConfigureAutosave();
+    _loadSettings();
   }
 
-  Future<void> _loadSettingsAndConfigureAutosave() async {
+  Future<void> _loadSettings() async {
     _settings = await loadAppSettings();
-    _configureAutosave();
     if (mounted) setState(() {});
-  }
-
-  void _configureAutosave() {
-    _autosaveTimer?.cancel();
-    if (_settings.autoSave && _dirty) _scheduleAutosave();
-  }
-
-  void _scheduleAutosave() {
-    _autosaveTimer?.cancel();
-    if (!_settings.autoSave) return;
-    _autosaveTimer = Timer(Duration(seconds: _settings.autoSaveSeconds), () {
-      if (_dirty && !_saving && !_processing) {
-        unawaited(_persistLocalProject());
-      }
-    });
   }
 
   Future<void> _showSettings() async {
     final settings = await showAppSettingsDialog(context, _settings);
     if (settings == null || !mounted) return;
     setState(() => _settings = settings);
-    _configureAutosave();
   }
 
   Future<void> _importFont() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['ttf', 'otf'],
+      allowedExtensions: const ['ttf', 'otf', 'ttc'],
       withData: true,
     );
     final file = result?.files.single;
@@ -225,9 +207,18 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     final family =
         'Imported_${base.replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_')}_${bytes.length}';
     if (!_importedFonts.contains(family)) {
-      final loader = FontLoader(family)
-        ..addFont(Future.value(ByteData.sublistView(bytes)));
-      await loader.load();
+      try {
+        final loader = FontLoader(family)
+          ..addFont(Future.value(ByteData.sublistView(bytes)));
+        await loader.load();
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            _quickFeedback('字体无法加载，请确认文件未损坏且格式受支持'),
+          );
+        }
+        return;
+      }
       if (mounted) {
         setState(() {
           _importedFonts.add(family);
@@ -240,6 +231,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     final bubble = _bubble;
     if (bubble != null) {
       _replaceBubble(bubble.copyWith(fontFamily: family), remember: true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          _quickFeedback('字体已导入并应用到当前气泡'),
+        );
+      }
     }
   }
 
@@ -281,7 +277,6 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 
   @override
   void dispose() {
-    _autosaveTimer?.cancel();
     if (_dirty && _pages.isNotEmpty) unawaited(_persistLocalProject());
     _clearActiveSourceImage();
     _disposePages(_pages);
@@ -348,7 +343,6 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   void _markDirty() {
     _editRevision++;
     _dirty = true;
-    _scheduleAutosave();
   }
 
   Future<void> _loadStoredProject() async {
@@ -467,7 +461,6 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       }
     } finally {
       _saving = false;
-      if (_dirty) _scheduleAutosave();
     }
   }
 
@@ -960,6 +953,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       page.approved = false;
       _markDirty();
     });
+    _canvasRevision.value++;
   }
 
   void _replaceBubbleDuringDrag(BubblePlacement bubble) {
@@ -1743,7 +1737,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               child: SelectableText(
                 '@格式=BCS顺序字幕脚本\n@版本=2\n@坐标单位=px\n\n'
                 '[图片 1]\n@原文件名=示例.png\n@原图尺寸=1080x1920\n\n'
-                '@气泡ID=p1-b1\n@矩形=80,100,520,260\n@尾巴=右下\n@气泡=对话气泡\n@字体=Microsoft YaHei\n@字号=34\n@颜色=#141518\n@行距=1.25\n@描边=2\n@白底透明度=100\n这里替换对话\n\n'
+                '@气泡ID=p1-b1\n@矩形=80,100,520,260\n@尾巴=右下\n@气泡=对话气泡\n@字体=Noto Sans SC\n@字号=34\n@颜色=#141518\n@行距=1.25\n@描边=2\n@白底透明度=100\n这里替换对话\n\n'
                 '说明：\n'
                 '• [图片 1]、[图片 2] 严格对应确认后的第 1、2 张图片；文件名只作提示。\n'
                 '• 每张必须填写 @原图尺寸=宽x高，应用时会与实际图片严格校验。\n'
@@ -1857,7 +1851,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           content: const SizedBox(
             width: 560,
             child: Text(
-              '1. 软件启动后先进入项目页。可以创建、删除或切换项目；名称留空时会按创建时间自动命名。\n\n2. 点击“添加图片”后，图片默认按文件名自然排序，例如 1、2、10。可以在顺序确认窗口继续拖动调整。\n\n3. 点击顶部“字幕”。每个 [图片 N] 段必须包含 @原图尺寸；气泡使用原图像素 @矩形=x,y,宽,高。字幕只按确认顺序对应，不按文件名匹配。\n\n4. 字幕编辑器采用草稿模式；点击取消不会改变工程。稳定的 @气泡ID 可在再次应用时保留手工位置和样式。\n\n5. 在画布上拖动气泡或八个缩放点，右侧可修改文字、形状、字体、颜色、字号、行距、描边和尾巴方向。点击画布空白处可取消选框。\n\n6. 导出位于右上角，不属于编辑流程。设置中可以选择默认保存目录、是否每次询问位置、命名方式和自动保存间隔。\n\n图片和字幕始终只在当前设备处理，不会上传。',
+              '1. 软件启动后先进入项目页。可以创建、删除或切换项目；名称留空时会按创建时间自动命名。\n\n2. 点击“添加图片”后，图片默认按文件名自然排序，例如 1、2、10。可以在顺序确认窗口继续拖动调整。\n\n3. 点击顶部“字幕”。每个 [图片 N] 段必须包含 @原图尺寸；气泡使用原图像素 @矩形=x,y,宽,高。字幕只按确认顺序对应，不按文件名匹配。\n\n4. 字幕编辑器采用草稿模式；点击取消不会改变工程。稳定的 @气泡ID 可在再次应用时保留手工位置和样式。\n\n5. 单击气泡会立即显示选框；单击画布空白处会关闭选框，直到再次单击气泡。右侧可修改文字、形状、字体、颜色、字号、行距、描边和尾巴方向。\n\n6. 项目不再持续自动保存。点击右上角保存按钮，或切换回项目页时保存一次。导出位于右上角，不属于编辑流程。\n\n图片和字幕始终只在当前设备处理，不会上传。',
               style: TextStyle(fontSize: 15, height: 1.6),
             ),
           ),
@@ -2610,18 +2604,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 final sy = height / page.originalHeight;
                 int hitTest(Offset local) {
                   final point = Offset(local.dx / sx, local.dy / sy);
-                  for (var i = page.placements.length - 1; i >= 0; i--) {
-                    final b = page.placements[i];
-                    if (Rect.fromLTWH(
-                      b.x,
-                      b.y,
-                      b.width,
-                      b.height,
-                    ).inflate(18).contains(point)) {
-                      return i;
-                    }
-                  }
-                  return -1;
+                  return hitTestBubble(page.placements, point);
                 }
 
                 _DragMode? hitHandle(Offset local, BubblePlacement bubble) {
@@ -2709,13 +2692,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                           setState(() => _hoverMode = null);
                         }
                       },
-                      child: GestureDetector(
+                      child: Listener(
                         behavior: HitTestBehavior.opaque,
-                        dragStartBehavior: DragStartBehavior.down,
-                        onTapDown: (details) {
-                          final interaction = interactionAt(
-                            details.localPosition,
-                          );
+                        onPointerDown: (event) {
+                          final interaction =
+                              interactionAt(event.localPosition);
                           if (interaction != null) {
                             setState(() {
                               _selectedBubble = interaction.$1;
@@ -2726,162 +2707,167 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                             setState(() => _selectionVisible = false);
                           }
                         },
-                        onPanStart: (details) {
-                          final interaction = interactionAt(
-                            details.localPosition,
-                          );
-                          if (interaction == null) return;
-                          setState(() {
-                            _selectedBubble = interaction.$1;
-                            _selectionVisible = true;
-                            _dragMode = interaction.$2;
-                            _hoverMode = interaction.$2;
-                            _inspectorVisible = true;
-                          });
-                          _remember(currentPageOnly: true);
-                        },
-                        onPanUpdate: (details) {
-                          final b = _bubble;
-                          final mode = _dragMode;
-                          if (b == null || mode == null) return;
-                          final dx = details.delta.dx / sx;
-                          final dy = details.delta.dy / sy;
-                          const minWidth = 80.0;
-                          const minHeight = 56.0;
-                          var left = b.x;
-                          var top = b.y;
-                          var right = b.x + b.width;
-                          var bottom = b.y + b.height;
-                          switch (mode) {
-                            case _DragMode.move:
-                              left = (left + dx).clamp(
-                                0,
-                                page.originalWidth - b.width,
-                              );
-                              top = (top + dy).clamp(
-                                0,
-                                page.originalHeight - b.height,
-                              );
-                              right = left + b.width;
-                              bottom = top + b.height;
-                            case _DragMode.topLeft:
-                              left = (left + dx).clamp(0, right - minWidth);
-                              top = (top + dy).clamp(0, bottom - minHeight);
-                            case _DragMode.top:
-                              top = (top + dy).clamp(0, bottom - minHeight);
-                            case _DragMode.topRight:
-                              right = (right + dx).clamp(
-                                left + minWidth,
-                                page.originalWidth.toDouble(),
-                              );
-                              top = (top + dy).clamp(0, bottom - minHeight);
-                            case _DragMode.right:
-                              right = (right + dx).clamp(
-                                left + minWidth,
-                                page.originalWidth.toDouble(),
-                              );
-                            case _DragMode.bottomRight:
-                              right = (right + dx).clamp(
-                                left + minWidth,
-                                page.originalWidth.toDouble(),
-                              );
-                              bottom = (bottom + dy).clamp(
-                                top + minHeight,
-                                page.originalHeight.toDouble(),
-                              );
-                            case _DragMode.bottom:
-                              bottom = (bottom + dy).clamp(
-                                top + minHeight,
-                                page.originalHeight.toDouble(),
-                              );
-                            case _DragMode.bottomLeft:
-                              left = (left + dx).clamp(0, right - minWidth);
-                              bottom = (bottom + dy).clamp(
-                                top + minHeight,
-                                page.originalHeight.toDouble(),
-                              );
-                            case _DragMode.left:
-                              left = (left + dx).clamp(0, right - minWidth);
-                          }
-                          _replaceBubbleDuringDrag(
-                            b.copyWith(
-                              x: left,
-                              y: top,
-                              width: right - left,
-                              height: bottom - top,
-                            ),
-                          );
-                        },
-                        onPanEnd: (_) => setState(() => _dragMode = null),
-                        onPanCancel: () => setState(() => _dragMode = null),
-                        child: Container(
-                          width: width,
-                          height: height,
-                          decoration: BoxDecoration(
-                            border: Border.all(color: AppColors.ink, width: 2),
-                            color: Colors.white,
-                          ),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              RepaintBoundary(
-                                child: CustomPaint(
-                                  painter: PagePainter(
-                                    page: page,
-                                    sourceImage:
-                                        _activeSourcePageId == page.pageId
-                                            ? _activeSourceImage
-                                            : null,
-                                    showBubbles: _showRendered,
-                                    repaint: _canvasRevision,
-                                    selectedIndex: !_showRendered ||
-                                            !_selectionVisible ||
-                                            page.placements.isEmpty
-                                        ? null
-                                        : _selectedBubble,
-                                  ),
-                                ),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          dragStartBehavior: DragStartBehavior.down,
+                          onPanStart: (details) {
+                            final interaction = interactionAt(
+                              details.localPosition,
+                            );
+                            if (interaction == null) return;
+                            setState(() {
+                              _selectedBubble = interaction.$1;
+                              _selectionVisible = true;
+                              _dragMode = interaction.$2;
+                              _hoverMode = interaction.$2;
+                              _inspectorVisible = true;
+                            });
+                            _remember(currentPageOnly: true);
+                          },
+                          onPanUpdate: (details) {
+                            final b = _bubble;
+                            final mode = _dragMode;
+                            if (b == null || mode == null) return;
+                            final dx = details.delta.dx / sx;
+                            final dy = details.delta.dy / sy;
+                            const minWidth = 80.0;
+                            const minHeight = 56.0;
+                            var left = b.x;
+                            var top = b.y;
+                            var right = b.x + b.width;
+                            var bottom = b.y + b.height;
+                            switch (mode) {
+                              case _DragMode.move:
+                                left = (left + dx).clamp(
+                                  0,
+                                  page.originalWidth - b.width,
+                                );
+                                top = (top + dy).clamp(
+                                  0,
+                                  page.originalHeight - b.height,
+                                );
+                                right = left + b.width;
+                                bottom = top + b.height;
+                              case _DragMode.topLeft:
+                                left = (left + dx).clamp(0, right - minWidth);
+                                top = (top + dy).clamp(0, bottom - minHeight);
+                              case _DragMode.top:
+                                top = (top + dy).clamp(0, bottom - minHeight);
+                              case _DragMode.topRight:
+                                right = (right + dx).clamp(
+                                  left + minWidth,
+                                  page.originalWidth.toDouble(),
+                                );
+                                top = (top + dy).clamp(0, bottom - minHeight);
+                              case _DragMode.right:
+                                right = (right + dx).clamp(
+                                  left + minWidth,
+                                  page.originalWidth.toDouble(),
+                                );
+                              case _DragMode.bottomRight:
+                                right = (right + dx).clamp(
+                                  left + minWidth,
+                                  page.originalWidth.toDouble(),
+                                );
+                                bottom = (bottom + dy).clamp(
+                                  top + minHeight,
+                                  page.originalHeight.toDouble(),
+                                );
+                              case _DragMode.bottom:
+                                bottom = (bottom + dy).clamp(
+                                  top + minHeight,
+                                  page.originalHeight.toDouble(),
+                                );
+                              case _DragMode.bottomLeft:
+                                left = (left + dx).clamp(0, right - minWidth);
+                                bottom = (bottom + dy).clamp(
+                                  top + minHeight,
+                                  page.originalHeight.toDouble(),
+                                );
+                              case _DragMode.left:
+                                left = (left + dx).clamp(0, right - minWidth);
+                            }
+                            _replaceBubbleDuringDrag(
+                              b.copyWith(
+                                x: left,
+                                y: top,
+                                width: right - left,
+                                height: bottom - top,
                               ),
-                              if (_loadingSourcePageId == page.pageId)
-                                Positioned(
-                                  top: 10,
-                                  right: 10,
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(.72),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: const Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 9,
-                                        vertical: 6,
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          SizedBox(
-                                            width: 13,
-                                            height: 13,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          SizedBox(width: 7),
-                                          Text(
-                                            '正在加载高清原图',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                            );
+                          },
+                          onPanEnd: (_) => setState(() => _dragMode = null),
+                          onPanCancel: () => setState(() => _dragMode = null),
+                          child: Container(
+                            width: width,
+                            height: height,
+                            decoration: BoxDecoration(
+                              border:
+                                  Border.all(color: AppColors.ink, width: 2),
+                              color: Colors.white,
+                            ),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                RepaintBoundary(
+                                  child: CustomPaint(
+                                    painter: PagePainter(
+                                      page: page,
+                                      sourceImage:
+                                          _activeSourcePageId == page.pageId
+                                              ? _activeSourceImage
+                                              : null,
+                                      showBubbles: _showRendered,
+                                      repaint: _canvasRevision,
+                                      selectedIndex: !_showRendered ||
+                                              !_selectionVisible ||
+                                              page.placements.isEmpty
+                                          ? null
+                                          : _selectedBubble,
                                     ),
                                   ),
                                 ),
-                            ],
+                                if (_loadingSourcePageId == page.pageId)
+                                  Positioned(
+                                    top: 10,
+                                    right: 10,
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(.72),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Padding(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 9,
+                                          vertical: 6,
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            SizedBox(
+                                              width: 13,
+                                              height: 13,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                            SizedBox(width: 7),
+                                            Text(
+                                              '正在加载高清原图',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -3112,12 +3098,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                     value: bubble.fontFamily,
                     items: [
                       ...const [
-                        ('Microsoft YaHei', '微软雅黑'),
-                        ('SimSun', '宋体'),
-                        ('SimHei', '黑体'),
-                        ('KaiTi', '楷体'),
-                        ('Arial', 'Arial'),
-                        ('Noto Sans CJK SC', 'Noto Sans'),
+                        ('Noto Sans SC', '思源黑体'),
+                        ('ZCOOL XiaoWei', '站酷小薇体'),
+                        ('Ma Shan Zheng', '马善政毛笔体'),
                       ].map(
                         (item) => DropdownMenuItem(
                           value: item.$1,
@@ -3137,12 +3120,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                         ),
                       if (!_importedFonts.contains(bubble.fontFamily) &&
                           !const {
-                            'Microsoft YaHei',
-                            'SimSun',
-                            'SimHei',
-                            'KaiTi',
-                            'Arial',
-                            'Noto Sans CJK SC',
+                            'Noto Sans SC',
+                            'ZCOOL XiaoWei',
+                            'Ma Shan Zheng',
                           }.contains(bubble.fontFamily))
                         DropdownMenuItem(
                           value: bubble.fontFamily,
@@ -3155,6 +3135,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                           bubble.copyWith(fontFamily: value),
                           remember: true,
                         );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          _quickFeedback('字体已切换，画布已刷新'),
+                        );
                       }
                     },
                   ),
@@ -3162,7 +3145,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 const SizedBox(width: 6),
                 IconButton.outlined(
                   onPressed: _importFont,
-                  tooltip: '导入 TTF / OTF 字体',
+                  tooltip: '导入 TTF / OTF / TTC 字体',
                   icon: const Icon(Icons.file_open_outlined, size: 19),
                 ),
               ],

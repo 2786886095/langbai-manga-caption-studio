@@ -44,13 +44,16 @@ ThemeData buildAppTheme() {
     brightness: Brightness.light,
     colorScheme: scheme,
     scaffoldBackgroundColor: AppColors.paper,
+    fontFamily: 'Noto Sans SC',
     fontFamilyFallback: const [
-      'Microsoft YaHei',
       'PingFang SC',
-      'Noto Sans CJK SC',
+      'sans-serif',
     ],
     dividerColor: AppColors.line,
-    splashFactory: NoSplash.splashFactory,
+    splashFactory: InkRipple.splashFactory,
+    splashColor: AppColors.pink.withOpacity(.12),
+    highlightColor: AppColors.pink.withOpacity(.07),
+    hoverColor: AppColors.pink.withOpacity(.05),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
         TargetPlatform.android: _InstantPageTransitionsBuilder(),

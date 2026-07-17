@@ -190,7 +190,7 @@ BubblePlacement _decodePlacement(
       lineHeight: _number(item, 'lineHeight', 1.25),
       strokeWidth: _number(item, 'strokeWidth', 3),
       fillOpacity: _number(item, 'fillOpacity', 1).clamp(0, 1),
-      fontFamily: item['fontFamily']?.toString() ?? 'Microsoft YaHei',
+      fontFamily: normalizeBubbleFontFamily(item['fontFamily']?.toString()),
       fontColorValue: (item['fontColorValue'] as num?)?.toInt() ?? 0xff141518,
     );
 
@@ -308,7 +308,8 @@ Future<ProjectData> _decodeProjectRoot(
             lineHeight: _number(item, 'lineHeight', 1.25),
             strokeWidth: _number(item, 'strokeWidth', 3),
             fillOpacity: _number(item, 'fillOpacity', 1).clamp(0, 1),
-            fontFamily: item['fontFamily']?.toString() ?? 'Microsoft YaHei',
+            fontFamily:
+                normalizeBubbleFontFamily(item['fontFamily']?.toString()),
             fontColorValue:
                 (item['fontColorValue'] as num?)?.toInt() ?? 0xff141518,
           ),

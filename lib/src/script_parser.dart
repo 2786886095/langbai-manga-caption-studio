@@ -300,13 +300,8 @@ CaptionLayoutSpec _buildLayoutSpec(
       ),
   };
   final font = switch (values['字体']?.trim()) {
-    '微软雅黑' => 'Microsoft YaHei',
-    '宋体' => 'SimSun',
-    '黑体' => 'SimHei',
-    '楷体' => 'KaiTi',
-    'Noto Sans' => 'Noto Sans CJK SC',
     null || '' => null,
-    final value => value,
+    final value => normalizeBubbleFontFamily(value),
   };
   if (values.containsKey('尾巴位置')) {
     warnings.add('第 $line 行：@尾巴位置 已停用；尾部固定在气泡边缘，只需设置四向 @尾巴。');

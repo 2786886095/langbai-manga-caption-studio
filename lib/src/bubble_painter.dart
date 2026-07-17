@@ -88,6 +88,21 @@ bool bubbleHasPointer(BubbleShape shape) =>
     shape == BubbleShape.thought ||
     shape == BubbleShape.whisper;
 
+int hitTestBubble(List<BubblePlacement> bubbles, Offset point) {
+  for (var index = bubbles.length - 1; index >= 0; index--) {
+    final bubble = bubbles[index];
+    if (Rect.fromLTWH(
+      bubble.x,
+      bubble.y,
+      bubble.width,
+      bubble.height,
+    ).contains(point)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
 class PagePainter extends CustomPainter {
   PagePainter({
     required this.page,

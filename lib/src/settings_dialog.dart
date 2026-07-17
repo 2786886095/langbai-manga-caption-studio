@@ -77,50 +77,6 @@ Future<AppSettings?> showAppSettingsDialog(
                   }),
                 ),
                 const Divider(height: 28),
-                const Text(
-                  '项目保护',
-                  style: TextStyle(fontWeight: FontWeight.w900),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('自动保存当前项目'),
-                  subtitle: const Text('切换项目时无论此开关如何都会保存一次'),
-                  value: settings.autoSave,
-                  onChanged: (value) => setDialogState(() {
-                    settings = settings.copyWith(autoSave: value);
-                  }),
-                ),
-                if (settings.autoSave)
-                  Row(
-                    children: [
-                      const Expanded(child: Text('自动保存间隔')),
-                      DropdownButton<int>(
-                        value: const {
-                          3,
-                          5,
-                          10,
-                          30,
-                        }.contains(settings.autoSaveSeconds)
-                            ? settings.autoSaveSeconds
-                            : 3,
-                        items: const [
-                          DropdownMenuItem(value: 3, child: Text('3 秒')),
-                          DropdownMenuItem(value: 5, child: Text('5 秒')),
-                          DropdownMenuItem(value: 10, child: Text('10 秒')),
-                          DropdownMenuItem(value: 30, child: Text('30 秒')),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setDialogState(() {
-                            settings = settings.copyWith(
-                              autoSaveSeconds: value,
-                            );
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                const Divider(height: 28),
                 const _UpdateSettingsSection(),
               ],
             ),

@@ -5,6 +5,25 @@ enum BubbleShape { ellipse, rounded, shout, thought, whisper }
 
 enum TailDirection { upLeft, upRight, downLeft, downRight }
 
+const defaultBubbleFontFamily = 'Noto Sans SC';
+
+String normalizeBubbleFontFamily(String? family) {
+  final value = family?.trim() ?? '';
+  return switch (value) {
+    '' ||
+    'Microsoft YaHei' ||
+    '微软雅黑' ||
+    'SimHei' ||
+    '黑体' ||
+    'Noto Sans CJK SC' ||
+    'Noto Sans' =>
+      defaultBubbleFontFamily,
+    'SimSun' || '宋体' => 'ZCOOL XiaoWei',
+    'KaiTi' || '楷体' => 'Ma Shan Zheng',
+    _ => value,
+  };
+}
+
 class CaptionLayoutSpec {
   const CaptionLayoutSpec({
     this.x,
@@ -92,7 +111,7 @@ class BubblePlacement {
     this.lineHeight = 1.25,
     this.strokeWidth = 3,
     this.fillOpacity = 1,
-    this.fontFamily = 'Microsoft YaHei',
+    this.fontFamily = defaultBubbleFontFamily,
     this.fontColorValue = 0xff141518,
     this.tailDirection = TailDirection.downRight,
   });
