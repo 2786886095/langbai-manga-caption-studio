@@ -640,10 +640,21 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     }
     setState(() {
       _selectedBubble = 0;
-      _selectionVisible = true;
+      _selectionVisible = _page?.placements.isNotEmpty ?? false;
       _dirty = true;
     });
     if (migratedLegacy) _script.text = _scriptForPages(_pages);
+    final bubbleCount = _pages.fold<int>(
+      0,
+      (total, page) => total + page.placements.length,
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '字幕已应用并完成排版：${_pages.length} 张图片，共 $bubbleCount 个气泡。脚本中的矩形坐标和样式已生效。',
+        ),
+      ),
+    );
     if (mounted && (parsed.warnings.isNotEmpty || migratedLegacy)) {
       final messages = <String>[
         if (migratedLegacy) '旧版文件名脚本已按段落出现顺序迁移为 v2；文件名不再参与匹配。',
@@ -1118,7 +1129,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   Future<void> _showScriptEditor() async {
     final draft = TextEditingController(text: _script.text);
     try {
-      await showDialog<void>(
+      final appliedScript = await showDialog<String>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('匹配字幕脚本'),
@@ -1160,17 +1171,16 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               child: const Text('取消'),
             ),
             FilledButton(
-              onPressed: () {
-                _script.text = draft.text;
-                setState(() => _dirty = true);
-                Navigator.pop(context);
-                _autoArrange();
-              },
+              onPressed: () => Navigator.pop(context, draft.text),
               child: const Text('应用并自动排版'),
             ),
           ],
         ),
       );
+      if (appliedScript == null || !mounted) return;
+      _script.text = appliedScript;
+      setState(() => _dirty = true);
+      _autoArrange();
     } finally {
       draft.dispose();
     }
