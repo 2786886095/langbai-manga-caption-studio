@@ -439,9 +439,10 @@ ipcMain.handle('desktop:write-export-image', async (_event, request) => {
 });
 
 ipcMain.handle('desktop:check-for-updates', async () => {
-  if (!installUpdateSupported || !autoUpdater) {
+  if (!installUpdateSupported) {
     return JSON.stringify(await checkExternalRelease());
   }
+  if (!autoUpdater) return JSON.stringify(updateState);
   setUpdateState({ state: 'checking', message: '', progress: 0 });
   try {
     await autoUpdater.checkForUpdates();

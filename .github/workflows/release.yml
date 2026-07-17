@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 env:
-  APP_VERSION: 0.9.6
+  APP_VERSION: 0.9.7
 
 jobs:
   validate:
@@ -156,7 +156,17 @@ jobs:
         working-directory: C:\b
         shell: pwsh
         run: |
-          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm --config.node-linker=hoisted install --frozen-lockfile --ignore-scripts
+          $requiredUpdaterModules = @(
+            'electron-updater', 'fs-extra', 'js-yaml', 'lazy-val',
+            'lodash.escaperegexp', 'lodash.isequal', 'semver',
+            'tiny-typed-emitter', 'builder-util-runtime'
+          )
+          foreach ($module in $requiredUpdaterModules) {
+            if (-not (Test-Path "node_modules\$module")) {
+              throw "Missing desktop updater runtime module: $module"
+            }
+          }
           pnpm exec electron-builder --win nsis portable --publish never
           New-Item -ItemType Directory -Path $env:GITHUB_WORKSPACE\release-assets -Force | Out-Null
           Copy-Item -Path dist\*.exe,dist\*.blockmap,dist\latest.yml -Destination $env:GITHUB_WORKSPACE\release-assets -Force
