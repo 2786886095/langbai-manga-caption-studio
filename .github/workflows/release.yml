@@ -37,11 +37,13 @@ jobs:
           (Get-Content build/web/index.html -Raw).Replace('<base href="/">', '<base href="./">') | Set-Content build/web/index.html -NoNewline
           New-Item -ItemType Directory -Path desktop-shell/web -Force | Out-Null
           Copy-Item -Path build/web/* -Destination desktop-shell/web -Recurse -Force
+          New-Item -ItemType Directory -Path C:\b -Force | Out-Null
+          Copy-Item -Path desktop-shell/* -Destination C:\b -Recurse -Force
       - name: Install desktop dependencies
-        working-directory: desktop-shell
+        working-directory: C:\b
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build Setup, portable app, and publish update metadata
-        working-directory: desktop-shell
+        working-directory: C:\b
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm exec electron-builder --win nsis portable --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
