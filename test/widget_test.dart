@@ -450,6 +450,45 @@ void main() {
     expect(result.fontSize, 39);
   });
 
+  test('explicit script geometry overrides an existing manual placement', () {
+    const caption = CaptionLine(
+      speaker: '',
+      text: '使用脚本坐标',
+      bubbleId: 'p1-b1',
+      layout: CaptionLayoutSpec(
+        x: 620,
+        y: 140,
+        width: 360,
+        height: 220,
+      ),
+    );
+    const existing = BubblePlacement(
+      caption: caption,
+      x: 20,
+      y: 30,
+      width: 180,
+      height: 90,
+    );
+    const generated = BubblePlacement(
+      caption: caption,
+      x: 620,
+      y: 140,
+      width: 360,
+      height: 220,
+    );
+
+    final result = preserveEditedPlacements(
+      const [existing],
+      const [generated],
+      const [caption],
+    ).single;
+
+    expect(result.x, 620);
+    expect(result.y, 140);
+    expect(result.width, 360);
+    expect(result.height, 220);
+  });
+
   test('stable bubble ids preserve geometry when a caption is inserted', () {
     const first = CaptionLine(speaker: '', text: '第一句', bubbleId: 'p1-b1');
     const second = CaptionLine(speaker: '', text: '第二句', bubbleId: 'p1-b2');

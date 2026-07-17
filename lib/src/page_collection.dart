@@ -27,9 +27,20 @@ List<BubblePlacement> preserveEditedPlacements(
   for (var i = 0; i < result.length; i++) {
     final id = captions[i].bubbleId;
     final previous = id.isNotEmpty ? byId[id] : null;
-    if (previous != null) {
+    final layout = captions[i].layout;
+    final hasExplicitGeometry = layout != null &&
+        (layout.x != null ||
+            layout.y != null ||
+            layout.width != null ||
+            layout.height != null ||
+            layout.xPercent != null ||
+            layout.yPercent != null ||
+            layout.widthPercent != null ||
+            layout.heightPercent != null ||
+            layout.positionPreset != null);
+    if (previous != null && !hasExplicitGeometry) {
       result[i] = previous.copyWith(caption: captions[i]);
-    } else if (id.isEmpty && i < existing.length) {
+    } else if (id.isEmpty && i < existing.length && !hasExplicitGeometry) {
       result[i] = existing[i].copyWith(caption: captions[i]);
     }
   }
