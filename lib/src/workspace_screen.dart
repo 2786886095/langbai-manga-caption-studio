@@ -2655,6 +2655,30 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                   );
                 }
 
+                void applyPointerSelection(
+                  (int, _DragMode)? interaction, {
+                  bool beginDrag = false,
+                }) {
+                  setState(() {
+                    if (interaction == null) {
+                      _selectionVisible = false;
+                      _dragMode = null;
+                      _hoverMode = null;
+                      return;
+                    }
+                    _selectedBubble = interaction.$1;
+                    _selectionVisible = true;
+                    _inspectorVisible = true;
+                    if (beginDrag) {
+                      _dragMode = interaction.$2;
+                      _hoverMode = interaction.$2;
+                    }
+                  });
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _canvasRevision.value++;
+                  });
+                }
+
                 MouseCursor cursorFor(_DragMode? mode) => switch (mode) {
                       _DragMode.topLeft ||
                       _DragMode.bottomRight =>
@@ -2693,33 +2717,27 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       child: Listener(
                         behavior: HitTestBehavior.opaque,
                         onPointerDown: (event) {
-                          final interaction =
-                              interactionAt(event.localPosition);
-                          if (interaction != null) {
-                            setState(() {
-                              _selectedBubble = interaction.$1;
-                              _selectionVisible = true;
-                              _inspectorVisible = true;
-                            });
-                          } else {
-                            setState(() => _selectionVisible = false);
-                          }
+                          applyPointerSelection(
+                            interactionAt(event.localPosition),
+                          );
                         },
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           dragStartBehavior: DragStartBehavior.down,
+                          onTapUp: (details) {
+                            applyPointerSelection(
+                              interactionAt(details.localPosition),
+                            );
+                          },
                           onPanStart: (details) {
                             final interaction = interactionAt(
                               details.localPosition,
                             );
                             if (interaction == null) return;
-                            setState(() {
-                              _selectedBubble = interaction.$1;
-                              _selectionVisible = true;
-                              _dragMode = interaction.$2;
-                              _hoverMode = interaction.$2;
-                              _inspectorVisible = true;
-                            });
+                            applyPointerSelection(
+                              interaction,
+                              beginDrag: true,
+                            );
                             _remember(currentPageOnly: true);
                           },
                           onPanUpdate: (details) {
@@ -2809,6 +2827,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                               children: [
                                 RepaintBoundary(
                                   child: CustomPaint(
+                                    key: ValueKey((
+                                      page.pageId,
+                                      _selectionVisible ? _selectedBubble : -1,
+                                    )),
                                     painter: PagePainter(
                                       page: page,
                                       sourceImage:
