@@ -1,6 +1,7 @@
 name: Build and publish Windows release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'v*'
@@ -34,6 +35,7 @@ jobs:
           flutter test
           flutter build web --release
           (Get-Content build/web/index.html -Raw).Replace('<base href="/">', '<base href="./">') | Set-Content build/web/index.html -NoNewline
+          New-Item -ItemType Directory -Path desktop-shell/web -Force | Out-Null
           Copy-Item -Path build/web/* -Destination desktop-shell/web -Recurse -Force
       - name: Install desktop dependencies
         working-directory: desktop-shell
@@ -42,4 +44,4 @@ jobs:
         working-directory: desktop-shell
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm exec electron-builder --win nsis portable --publish always
+        run: pnpm exec electron-builder --win nsis portable --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
