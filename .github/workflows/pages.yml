@@ -8,6 +8,7 @@ on:
       - 'lib/**'
       - 'web/**'
       - 'assets/**'
+      - 'AI字幕脚本生成指南.md'
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - '.github/workflows/pages.yml'
