@@ -12,6 +12,8 @@
 <p align="center">
   <a href="https://github.com/2786886095/langbai-manga-caption-studio/releases/latest"><strong>下载 Windows Setup</strong></a>
   ·
+  <a href="https://2786886095.github.io/langbai-manga-caption-studio/"><strong>打开 Web 在线版</strong></a>
+  ·
   <a href="AI字幕脚本生成指南.md">AI 字幕脚本指南</a>
   ·
   <a href="字幕导入格式规范.md">字幕格式规范</a>
@@ -97,12 +99,20 @@ BCS 顺序字幕脚本 v2 会记录原图尺寸、气泡 ID、矩形坐标、气
 
 ## 下载与更新
 
-- 推荐下载 [Windows Setup 安装版](https://github.com/2786886095/langbai-manga-caption-studio/releases/latest)。
-- 需要免安装使用时，可在同一发布页下载 Portable 便携版。
-- Setup 安装版检测到新版后，会在项目页顶部显示醒目的更新提示，并支持软件内下载安装。
-- 便携版和其他平台检测到新版后，会打开 GitHub Releases 下载页面。
+- [GitHub Releases](https://github.com/2786886095/langbai-manga-caption-studio/releases/latest) 同时提供以下平台版本：
 
-当前版本：**v0.9.0**
+| 平台 | 发布形式 | 说明 |
+| --- | --- | --- |
+| Windows | Setup EXE、Portable EXE | 推荐 Setup；支持软件内下载并安装更新 |
+| Android | 签名 APK、AAB | APK 可直接安装；AAB 用于应用商店发布 |
+| macOS | ZIP 应用包 | 使用临时签名，首次运行可能需要在系统安全设置中允许 |
+| Linux | x64 TAR.GZ | 解压后运行主程序 |
+| Web | [GitHub Pages 在线版](https://2786886095.github.io/langbai-manga-caption-studio/)、ZIP | 浏览器直接使用，数据保存在当前浏览器 |
+| iOS | 未签名 IPA | 供拥有 Apple 开发者证书的开发者重新签名；不能作为 App Store 正式包直接安装 |
+
+Windows Setup 检测到新版后，会在项目页顶部显示醒目的更新提示，并支持软件内下载安装。其他平台检测到新版后会打开 GitHub Releases。
+
+当前版本：**v0.9.1**
 
 ## 常用快捷键
 
@@ -129,7 +139,7 @@ pnpm install
 pnpm run dist
 ```
 
-推送 `v*` 标签会触发 `.github/workflows/release.yml`，自动执行分析、测试并构建 Windows Setup、便携版、`latest.yml` 和差分更新元数据。
+推送 `v*` 标签会触发 `.github/workflows/release.yml`，自动执行分析、测试并构建 Android、iOS、Windows、macOS、Linux 和 Web 版本。Windows Release 同时包含 `latest.yml` 与差分更新元数据。
 
 </details>
 
