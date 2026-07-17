@@ -48,6 +48,7 @@ app.*.map.json
 # Desktop build artifacts
 /desktop-shell/node_modules/
 /desktop-shell/web/
+/desktop-shell/dist/
 /desktop-shell/package-lock.json
 /release-windows*/
 

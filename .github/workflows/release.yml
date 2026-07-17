@@ -1,4 +1,4 @@
-name: Build and publish Windows release
+name: Build all platforms and publish release
 
 on:
   workflow_dispatch:
@@ -10,13 +10,127 @@ permissions:
   contents: write
 
 jobs:
-  windows-release:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+  android:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Restore Android signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          test -n "$KEYSTORE_BASE64"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/upload-keystore.jks
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=upload-keystore.jks\n' "$STORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > android/key.properties
+      - run: flutter pub get
+      - name: Build signed Android packages
+        run: |
+          flutter build apk --release
+          flutter build appbundle --release
+          mkdir -p release-assets
+          cp build/app/outputs/flutter-apk/app-release.apk release-assets/Langbai-Manga-Caption-Studio-Android-0.9.1.apk
+          cp build/app/outputs/bundle/release/app-release.aab release-assets/Langbai-Manga-Caption-Studio-Android-0.9.1.aab
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: release-assets/*
+
+  linux:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build Linux archive
+        run: |
+          flutter build linux --release
+          tar -C build/linux/x64/release/bundle -czf Langbai-Manga-Caption-Studio-Linux-x64-0.9.1.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: Langbai-Manga-Caption-Studio-Linux-x64-0.9.1.tar.gz
+
+  apple:
+    needs: validate
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build macOS app
+        run: |
+          flutter build macos --release
+          APP_PATH=$(find build/macos/Build/Products/Release -maxdepth 1 -name '*.app' -print -quit)
+          codesign --force --deep --sign - "$APP_PATH"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" Langbai-Manga-Caption-Studio-macOS-0.9.1.zip
+      - name: Build unsigned iOS package
+        run: |
+          flutter build ios --release --no-codesign
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          ditto -c -k --sequesterRsrc Payload Langbai-Manga-Caption-Studio-iOS-unsigned-0.9.1.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apple-release
+          path: |
+            Langbai-Manga-Caption-Studio-macOS-0.9.1.zip
+            Langbai-Manga-Caption-Studio-iOS-unsigned-0.9.1.ipa
+
+  web:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build web archive
+        run: |
+          flutter build web --release --base-href /langbai-manga-caption-studio/
+          cd build/web
+          zip -r ../../Langbai-Manga-Caption-Studio-Web-0.9.1.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-release
+          path: Langbai-Manga-Caption-Studio-Web-0.9.1.zip
+
+  windows:
+    needs: validate
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
           channel: stable
           cache: true
       - uses: pnpm/action-setup@v4
@@ -25,23 +139,42 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Test and build Flutter web app
+      - name: Build Flutter web shell
         shell: pwsh
         run: |
           flutter pub get
-          flutter analyze
-          flutter test
           flutter build web --release
           (Get-Content build/web/index.html -Raw).Replace('<base href="/">', '<base href="./">') | Set-Content build/web/index.html -NoNewline
           New-Item -ItemType Directory -Path desktop-shell/web -Force | Out-Null
           Copy-Item -Path build/web/* -Destination desktop-shell/web -Recurse -Force
           New-Item -ItemType Directory -Path C:\b -Force | Out-Null
           Copy-Item -Path desktop-shell/* -Destination C:\b -Recurse -Force
-      - name: Install desktop dependencies
+      - name: Build Windows Setup and portable app
         working-directory: C:\b
-        run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Build Setup, portable app, and publish update metadata
-        working-directory: C:\b
+        shell: pwsh
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm exec electron-builder --win nsis portable --publish never
+          New-Item -ItemType Directory -Path $env:GITHUB_WORKSPACE\release-assets -Force | Out-Null
+          Copy-Item -Path dist\*.exe,dist\*.blockmap,dist\latest.yml -Destination $env:GITHUB_WORKSPACE\release-assets -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: release-assets/*
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [android, linux, apple, web, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Create release and upload every platform
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm exec electron-builder --win nsis portable --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --title "浪白漫画字幕工坊 $RELEASE_TAG" --generate-notes
+          find release-assets -maxdepth 1 -type f -print0 | xargs -0 gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber
