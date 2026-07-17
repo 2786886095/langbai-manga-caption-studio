@@ -148,7 +148,7 @@ void main() {
     }
   });
 
-  test('bubble hit testing selects only the actual bubble bounds', () {
+  test('bubble hit testing selects only the visible bubble shape', () {
     const caption = CaptionLine(speaker: '', text: '测试');
     const bubble = BubblePlacement(
       caption: caption,
@@ -158,8 +158,19 @@ void main() {
       height: 120,
     );
     expect(hitTestBubble(const [bubble], const Offset(150, 150)), 0);
+    expect(hitTestBubble(const [bubble], const Offset(101, 101)), -1);
     expect(hitTestBubble(const [bubble], const Offset(90, 150)), -1);
     expect(hitTestBubble(const [bubble], const Offset(320, 150)), -1);
+
+    final tail = bubbleTailGeometry(
+      const Rect.fromLTWH(100, 100, 200, 120),
+      bubble,
+    );
+    final tailInterior = Offset(
+      (tail.start.dx + tail.tip.dx + tail.end.dx) / 3,
+      (tail.start.dy + tail.tip.dy + tail.end.dy) / 3,
+    );
+    expect(hitTestBubble(const [bubble], tailInterior), 0);
   });
 
   test('legacy font names map to bundled local fonts', () {

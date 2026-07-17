@@ -152,7 +152,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   double _zoom = 1;
   _DragMode? _dragMode;
   _DragMode? _hoverMode;
-  bool _selectionVisible = true;
+  bool _selectionVisible = false;
   bool _structureDirty = false;
   int _editRevision = 0;
   AppSettings _settings = const AppSettings();
@@ -395,8 +395,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         _projectThumbnailBase64 = thumbnail;
         _selectedPage = 0;
         _selectedBubble = 0;
-        _selectionVisible =
-            _pages.isNotEmpty && _pages.first.placements.isNotEmpty;
+        _selectionVisible = false;
         _processing = false;
         _dirty = needsMigration;
         _editRevision = 0;
@@ -636,7 +635,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         (page) => page.pageId == selectedPageId,
       );
       _selectedBubble = 0;
-      _selectionVisible = true;
+      _selectionVisible = false;
       _processing = false;
       if (replace) _projectName = '未命名工程';
       _markDirty();
@@ -776,7 +775,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     }
     setState(() {
       _selectedBubble = 0;
-      _selectionVisible = _page?.placements.isNotEmpty ?? false;
+      _selectionVisible = false;
       _markDirty();
     });
     if (migratedLegacy) _script.text = _scriptForPages(_pages);
@@ -824,7 +823,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       );
       page.approved = false;
       _selectedBubble = 0;
-      _selectionVisible = true;
+      _selectionVisible = false;
       _markDirty();
     });
     ScaffoldMessenger.of(
@@ -874,7 +873,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         bubbleCount += page.placements.length;
       }
       _selectedBubble = 0;
-      _selectionVisible = _page?.placements.isNotEmpty ?? false;
+      _selectionVisible = false;
       _markDirty();
     });
     ScaffoldMessenger.of(context).showSnackBar(
@@ -937,7 +936,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       final count = _pages[_selectedPage].placements.length;
       _selectedBubble =
           count == 0 ? 0 : snapshot.selectedBubble.clamp(0, count - 1);
-      _selectionVisible = count > 0;
+      _selectionVisible = false;
       _markDirty();
     });
     unawaited(_loadSelectedPageSource());
@@ -1115,7 +1114,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       page.captions.add(caption);
       page.placements.add(bubble);
       _selectedBubble = page.placements.length - 1;
-      _selectionVisible = true;
+      _selectionVisible = false;
       page.approved = false;
       _markDirty();
     });
@@ -1139,7 +1138,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       page.captions.add(caption);
       page.placements.add(bubble);
       _selectedBubble = page.placements.length - 1;
-      _selectionVisible = true;
+      _selectionVisible = false;
       page.approved = false;
       _markDirty();
     });
@@ -1155,7 +1154,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       _selectedBubble = page.placements.isEmpty
           ? 0
           : _selectedBubble.clamp(0, page.placements.length - 1);
-      _selectionVisible = page.placements.isNotEmpty;
+      _selectionVisible = false;
       page.approved = false;
       _markDirty();
     });
@@ -1185,7 +1184,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     setState(() {
       _selectedPage = index;
       _selectedBubble = 0;
-      _selectionVisible = _pages[index].placements.isNotEmpty;
+      _selectionVisible = false;
       _undoStack.clear();
       _redoStack.clear();
     });
@@ -1529,8 +1528,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         _projectThumbnailBase64 = thumbnail;
         _selectedPage = 0;
         _selectedBubble = 0;
-        _selectionVisible =
-            _pages.isNotEmpty && _pages.first.placements.isNotEmpty;
+        _selectionVisible = false;
         _markDirty();
         _structureDirty = true;
         _isDemoProject = false;

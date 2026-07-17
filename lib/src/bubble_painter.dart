@@ -88,15 +88,118 @@ bool bubbleHasPointer(BubbleShape shape) =>
     shape == BubbleShape.thought ||
     shape == BubbleShape.whisper;
 
+Path _bubbleTailPath(BubbleTailGeometry tail) {
+  final firstControl = Offset.lerp(tail.start, tail.tip, .62)!;
+  final secondControl = Offset.lerp(tail.tip, tail.end, .38)!;
+  return Path()
+    ..moveTo(tail.start.dx, tail.start.dy)
+    ..quadraticBezierTo(
+      firstControl.dx,
+      firstControl.dy,
+      tail.tip.dx,
+      tail.tip.dy,
+    )
+    ..quadraticBezierTo(
+      secondControl.dx,
+      secondControl.dy,
+      tail.end.dx,
+      tail.end.dy,
+    )
+    ..close();
+}
+
+Path _thoughtCloudPath(Rect rect) {
+  var cloud = Path()
+    ..addRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: rect.center,
+          width: rect.width * .82,
+          height: rect.height * .66,
+        ),
+        Radius.circular(rect.shortestSide * .28),
+      ),
+    );
+  const count = 14;
+  for (var i = 0; i < count; i++) {
+    final angle = math.pi * 2 * i / count;
+    final center = Offset(
+      rect.center.dx + math.cos(angle) * rect.width * .40,
+      rect.center.dy + math.sin(angle) * rect.height * .38,
+    );
+    final radius = rect.shortestSide * (i.isEven ? .145 : .125);
+    cloud = Path.combine(
+      PathOperation.union,
+      cloud,
+      Path()..addOval(Rect.fromCircle(center: center, radius: radius)),
+    );
+  }
+  return cloud;
+}
+
+Path _bubbleShapePath(Rect rect, BubbleShape shape) {
+  switch (shape) {
+    case BubbleShape.ellipse:
+      return Path()..addOval(rect);
+    case BubbleShape.rounded:
+      return Path()
+        ..addRRect(
+          RRect.fromRectAndRadius(
+            rect,
+            Radius.circular(rect.shortestSide * .20),
+          ),
+        );
+    case BubbleShape.shout:
+      final path = Path();
+      const points = 16;
+      for (var i = 0; i < points; i++) {
+        final angle = -math.pi / 2 + math.pi * 2 * i / points;
+        final scale = i.isEven ? 1.0 : .89;
+        final point = Offset(
+          rect.center.dx + math.cos(angle) * rect.width * .5 * scale,
+          rect.center.dy + math.sin(angle) * rect.height * .5 * scale,
+        );
+        if (i == 0) {
+          path.moveTo(point.dx, point.dy);
+        } else {
+          path.lineTo(point.dx, point.dy);
+        }
+      }
+      return path..close();
+    case BubbleShape.thought:
+      return _thoughtCloudPath(rect);
+    case BubbleShape.whisper:
+      return Path()..addOval(rect);
+  }
+}
+
+bool bubbleContainsPoint(BubblePlacement bubble, Offset point) {
+  final rect = Rect.fromLTWH(
+    bubble.x,
+    bubble.y,
+    bubble.width,
+    bubble.height,
+  );
+  final shapePath = _bubbleShapePath(rect, bubble.shape);
+  if (shapePath.contains(point)) return true;
+  if (!bubbleHasPointer(bubble.shape)) return false;
+
+  final tail = bubbleTailGeometry(rect, bubble);
+  if (bubble.shape != BubbleShape.thought) {
+    return _bubbleTailPath(tail).contains(point);
+  }
+
+  final anchor = Offset.lerp(tail.start, tail.end, .5)!;
+  for (final item in const [(.38, .066), (.68, .045), (.94, .027)]) {
+    final center = Offset.lerp(anchor, tail.tip, item.$1)!;
+    if ((point - center).distance <= rect.shortestSide * item.$2) return true;
+  }
+  return false;
+}
+
 int hitTestBubble(List<BubblePlacement> bubbles, Offset point) {
   for (var index = bubbles.length - 1; index >= 0; index--) {
-    final bubble = bubbles[index];
-    if (Rect.fromLTWH(
-      bubble.x,
-      bubble.y,
-      bubble.width,
-      bubble.height,
-    ).contains(point)) {
+    if (bubbleContainsPoint(bubbles[index], point)) {
       return index;
     }
   }
@@ -187,7 +290,7 @@ class PagePainter extends CustomPainter {
       ..color = const Color(0xff17181b)
       ..style = PaintingStyle.stroke
       ..strokeWidth = (bubble.strokeWidth * sx).clamp(1.5, 7);
-    final shapePath = _shapePath(rect, bubble.shape);
+    final shapePath = _bubbleShapePath(rect, bubble.shape);
     final tail = bubbleTailGeometry(rect, bubble);
     if (bubble.shape == BubbleShape.thought) {
       canvas.drawPath(shapePath, fill);
@@ -201,7 +304,7 @@ class PagePainter extends CustomPainter {
       }
     } else if (bubble.shape == BubbleShape.ellipse ||
         bubble.shape == BubbleShape.whisper) {
-      final tailPath = _tailPath(tail);
+      final tailPath = _bubbleTailPath(tail);
       final combined = Path.combine(PathOperation.union, shapePath, tailPath);
       canvas.drawPath(combined, fill);
       if (bubble.shape == BubbleShape.whisper) {
@@ -304,26 +407,6 @@ class PagePainter extends CustomPainter {
     }
   }
 
-  Path _tailPath(BubbleTailGeometry tail) {
-    final firstControl = Offset.lerp(tail.start, tail.tip, .62)!;
-    final secondControl = Offset.lerp(tail.tip, tail.end, .38)!;
-    return Path()
-      ..moveTo(tail.start.dx, tail.start.dy)
-      ..quadraticBezierTo(
-        firstControl.dx,
-        firstControl.dy,
-        tail.tip.dx,
-        tail.tip.dy,
-      )
-      ..quadraticBezierTo(
-        secondControl.dx,
-        secondControl.dy,
-        tail.end.dx,
-        tail.end.dy,
-      )
-      ..close();
-  }
-
   void _drawDashedPath(
     Canvas canvas,
     Path path,
@@ -343,71 +426,6 @@ class PagePainter extends CustomPainter {
         );
         distance += dash + gap;
       }
-    }
-  }
-
-  Path _thoughtCloudPath(Rect rect) {
-    var cloud = Path()
-      ..addRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: rect.center,
-            width: rect.width * .82,
-            height: rect.height * .66,
-          ),
-          Radius.circular(rect.shortestSide * .28),
-        ),
-      );
-    const count = 14;
-    for (var i = 0; i < count; i++) {
-      final angle = math.pi * 2 * i / count;
-      final center = Offset(
-        rect.center.dx + math.cos(angle) * rect.width * .40,
-        rect.center.dy + math.sin(angle) * rect.height * .38,
-      );
-      final radius = rect.shortestSide * (i.isEven ? .145 : .125);
-      cloud = Path.combine(
-        PathOperation.union,
-        cloud,
-        Path()..addOval(Rect.fromCircle(center: center, radius: radius)),
-      );
-    }
-    return cloud;
-  }
-
-  Path _shapePath(Rect rect, BubbleShape shape) {
-    switch (shape) {
-      case BubbleShape.ellipse:
-        return Path()..addOval(rect);
-      case BubbleShape.rounded:
-        return Path()
-          ..addRRect(
-            RRect.fromRectAndRadius(
-              rect,
-              Radius.circular(rect.shortestSide * .20),
-            ),
-          );
-      case BubbleShape.shout:
-        final path = Path();
-        const points = 16;
-        for (var i = 0; i < points; i++) {
-          final angle = -math.pi / 2 + math.pi * 2 * i / points;
-          final scale = i.isEven ? 1.0 : .89;
-          final point = Offset(
-            rect.center.dx + math.cos(angle) * rect.width * .5 * scale,
-            rect.center.dy + math.sin(angle) * rect.height * .5 * scale,
-          );
-          if (i == 0) {
-            path.moveTo(point.dx, point.dy);
-          } else {
-            path.lineTo(point.dx, point.dy);
-          }
-        }
-        return path..close();
-      case BubbleShape.thought:
-        return _thoughtCloudPath(rect);
-      case BubbleShape.whisper:
-        return Path()..addOval(rect);
     }
   }
 
