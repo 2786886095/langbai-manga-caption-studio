@@ -11,14 +11,26 @@ JSObject? get _desktopBridge => globalContext.has('desktopBridge')
 
 JSObject get _storage => globalContext['localStorage'] as JSObject;
 
-Future<String?> _invokeBridge(String method, [JSAny? argument]) async {
+bool get supportsIncrementalProjectStorage => _desktopBridge != null;
+
+Future<JSAny?> _invokeBridgeAny(String method, [JSAny? argument]) async {
   final bridge = _desktopBridge;
   if (bridge == null) return null;
   final promise = argument == null
       ? bridge.callMethod<JSPromise<JSAny?>>(method.toJS)
       : bridge.callMethod<JSPromise<JSAny?>>(method.toJS, argument);
-  final value = await promise.toDart;
-  return (value as JSString?)?.toDart;
+  return promise.toDart;
+}
+
+Future<String?> _invokeBridge(String method, [JSAny? argument]) async =>
+    (await _invokeBridgeAny(method, argument) as JSString?)?.toDart;
+
+Uint8List? _bridgeBytes(JSAny? value) {
+  if (value == null) return null;
+  if (value.typeofEquals('string')) {
+    return base64Decode((value as JSString).toDart);
+  }
+  return (value as JSUint8Array).toDart;
 }
 
 String? _get(String key) =>
@@ -68,9 +80,58 @@ Future<LocalProjectSummary> createLocalProject(String name) async {
 }
 
 Future<Uint8List?> loadLocalProject(String id) async {
-  final raw = await _invokeBridge('loadProjectData', {'id': id}.jsify()) ??
-      _get('bcs-project-$id');
+  if (_desktopBridge != null) {
+    return _bridgeBytes(
+      await _invokeBridgeAny('loadProjectData', {'id': id}.jsify()),
+    );
+  }
+  final raw = _get('bcs-project-$id');
   return raw == null ? null : base64Decode(raw);
+}
+
+Future<Uint8List?> loadLocalProjectManifest(String id) => _loadBridgeBytes(
+      'loadProjectManifest',
+      {'id': id}.jsify(),
+    );
+
+Future<Uint8List> loadLocalProjectImage(String id, String pageId) async {
+  final bytes = await _loadBridgeBytes(
+    'loadProjectImage',
+    {'id': id, 'pageId': pageId}.jsify(),
+  );
+  if (bytes == null) throw StateError('项目图片不存在：$pageId');
+  return bytes;
+}
+
+Future<Uint8List?> _loadBridgeBytes(String method, JSAny? request) async =>
+    _bridgeBytes(await _invokeBridgeAny(method, request));
+
+Future<void> saveLocalProjectImage(
+  String id,
+  String pageId,
+  Uint8List bytes,
+) async {
+  await _invokeBridge(
+    'saveProjectImage',
+    {'id': id, 'pageId': pageId, 'bytes': bytes.toJS}.jsify(),
+  );
+}
+
+Future<void> saveLocalProjectManifest(
+  String id,
+  String name,
+  Uint8List bytes, {
+  String? thumbnailBase64,
+}) async {
+  await _invokeBridge(
+    'saveProjectManifest',
+    {
+      'id': id,
+      'name': name,
+      'bytes': bytes.toJS,
+      if (thumbnailBase64 != null) 'thumbnailBase64': thumbnailBase64,
+    }.jsify(),
+  );
 }
 
 Future<void> saveLocalProject(
@@ -82,7 +143,7 @@ Future<void> saveLocalProject(
   final request = {
     'id': id,
     'name': name,
-    'base64': base64Encode(bytes),
+    'bytes': bytes.toJS,
     if (thumbnailBase64 != null) 'thumbnailBase64': thumbnailBase64,
   }.jsify();
   if (_desktopBridge != null) {
@@ -108,8 +169,12 @@ Future<void> saveLocalProject(
 }
 
 Future<Uint8List?> loadLocalProjectEdits(String id) async {
-  final raw = await _invokeBridge('loadProjectEdits', {'id': id}.jsify()) ??
-      _get('bcs-project-edits-$id');
+  if (_desktopBridge != null) {
+    return _bridgeBytes(
+      await _invokeBridgeAny('loadProjectEdits', {'id': id}.jsify()),
+    );
+  }
+  final raw = _get('bcs-project-edits-$id');
   return raw == null ? null : base64Decode(raw);
 }
 
@@ -122,7 +187,7 @@ Future<void> saveLocalProjectEdits(
   final request = {
     'id': id,
     'name': name,
-    'base64': base64Encode(bytes),
+    'bytes': bytes.toJS,
     if (thumbnailBase64 != null) 'thumbnailBase64': thumbnailBase64,
   }.jsify();
   if (_desktopBridge != null) {

@@ -235,6 +235,46 @@ void main() {
     expect(decoded.pages.single.approved, isTrue);
   });
 
+  test('incremental project manifest keeps source images out of JSON',
+      () async {
+    final png = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    );
+    final codec = await ui.instantiateImageCodec(png);
+    final frame = await codec.getNextFrame();
+    final page = ImagePage(
+      name: '001.png',
+      bytes: Uint8List.fromList(png),
+      image: frame.image,
+    );
+    const caption = CaptionLine(speaker: '', text: '增量工程');
+    page
+      ..captions = const [caption]
+      ..placements = const [
+        BubblePlacement(
+          caption: caption,
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 80,
+        ),
+      ];
+
+    final manifest = encodeProjectManifest([page], '脚本');
+    final json = utf8.decode(manifest);
+    expect(json, isNot(contains('sourceImage')));
+    expect(manifest.length, lessThan(2000));
+
+    final decoded = await decodeProjectManifest(manifest, (pageId) async {
+      expect(pageId, page.pageId);
+      return Uint8List.fromList(png);
+    });
+    expect(decoded.pages.single.name, '001.png');
+    expect(decoded.pages.single.captions.single.text, '增量工程');
+    decoded.pages.single.dispose();
+    page.dispose();
+  });
+
   test(
     'lightweight edit layers update bubbles without embedding images',
     () async {

@@ -5,6 +5,7 @@ const path = require('path');
 const releasePageUrl = 'https://github.com/2786886095/langbai-manga-caption-studio/releases/latest';
 const installUpdateSupported = process.platform === 'win32' && !process.env.PORTABLE_EXECUTABLE_FILE;
 let autoUpdater = null;
+const approvedImagePaths = new Set();
 let updateState = {
   state: 'idle',
   currentVersion: app.getVersion(),
@@ -54,7 +55,8 @@ function configureAutoUpdater() {
   if (!installUpdateSupported) return;
   try {
     ({ autoUpdater } = require('electron-updater'));
-    autoUpdater.autoDownload = true;
+    // Checking stays cheap; the installer downloads only after user consent.
+    autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.on('checking-for-update', () => setUpdateState({ state: 'checking', progress: 0 }));
     autoUpdater.on('update-available', (info) => setUpdateState({
@@ -121,6 +123,15 @@ async function readSettings() {
 
 app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors');
 
+function requestBuffer(request) {
+  if (request && request.bytes) return Buffer.from(request.bytes);
+  return Buffer.from(request.base64 || '', 'base64');
+}
+
+function storageName(value) {
+  return String(value || '').replace(/[^A-Za-z0-9_.-]/g, '_');
+}
+
 function createWindow() {
   const window = new BrowserWindow({
     width: 1440,
@@ -154,7 +165,7 @@ ipcMain.handle('desktop:save-file', async (_event, request) => {
   if (directory && settings.askExportLocation === false) {
     await fs.mkdir(directory, { recursive: true });
     const filePath = path.join(directory, path.basename(request.fileName));
-    await fs.writeFile(filePath, Buffer.from(request.base64, 'base64'));
+    await fs.writeFile(filePath, requestBuffer(request));
     return filePath;
   }
   const result = await dialog.showSaveDialog({
@@ -163,7 +174,7 @@ ipcMain.handle('desktop:save-file', async (_event, request) => {
     filters,
   });
   if (result.canceled || !result.filePath) return null;
-  await fs.writeFile(result.filePath, Buffer.from(request.base64, 'base64'));
+  await fs.writeFile(result.filePath, requestBuffer(request));
   return result.filePath;
 });
 
@@ -179,8 +190,30 @@ ipcMain.handle('desktop:open-project', async () => {
   return {
     name: path.basename(filePath),
     path: filePath,
-    base64: bytes.toString('base64'),
+    bytes: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
   };
+});
+
+ipcMain.handle('desktop:pick-image-paths', async () => {
+  const result = await dialog.showOpenDialog({
+    title: '选择漫画图片',
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'] }],
+  });
+  if (result.canceled) return null;
+  for (const filePath of result.filePaths) approvedImagePaths.add(path.resolve(filePath));
+  return JSON.stringify(result.filePaths.map((filePath) => ({
+    name: path.basename(filePath),
+    path: filePath,
+  })));
+});
+
+ipcMain.handle('desktop:read-image-file', async (_event, request) => {
+  const filePath = path.resolve(String(request.path || ''));
+  if (!approvedImagePaths.has(filePath)) throw new Error('图片路径未经用户选择');
+  const bytes = await fs.readFile(filePath);
+  approvedImagePaths.delete(filePath);
+  return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 });
 
 ipcMain.handle('desktop:list-projects', async () => {
@@ -205,19 +238,57 @@ ipcMain.handle('desktop:load-project-data', async (_event, request) => {
   try {
     const directory = await projectDirectory();
     const bytes = await fs.readFile(path.join(directory, `${request.id}.bcs.json`));
-    return bytes.toString('base64');
+    return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   } catch {
     return null;
   }
 });
 
-ipcMain.handle('desktop:save-project-data', async (_event, request) => {
+ipcMain.handle('desktop:load-project-manifest', async (_event, request) => {
+  try {
+    const directory = await projectDirectory();
+    const bytes = await fs.readFile(
+      path.join(directory, storageName(request.id), 'manifest.json'),
+    );
+    return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  } catch {
+    return null;
+  }
+});
+
+ipcMain.handle('desktop:load-project-image', async (_event, request) => {
   const directory = await projectDirectory();
-  await fs.writeFile(
-    path.join(directory, `${request.id}.bcs.json`),
-    Buffer.from(request.base64, 'base64'),
+  const bytes = await fs.readFile(
+    path.join(
+      directory,
+      storageName(request.id),
+      'images',
+      `${storageName(request.pageId)}.bin`,
+    ),
   );
-  const previous = (await readProjectCatalog()).find((project) => project.id === request.id);
+  return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+});
+
+ipcMain.handle('desktop:save-project-image', async (_event, request) => {
+  const directory = await projectDirectory();
+  const imageDirectory = path.join(directory, storageName(request.id), 'images');
+  await fs.mkdir(imageDirectory, { recursive: true });
+  await fs.writeFile(
+    path.join(imageDirectory, `${storageName(request.pageId)}.bin`),
+    requestBuffer(request),
+  );
+  return 'ok';
+});
+
+ipcMain.handle('desktop:save-project-manifest', async (_event, request) => {
+  const directory = await projectDirectory();
+  const projectPath = path.join(directory, storageName(request.id));
+  await fs.mkdir(projectPath, { recursive: true });
+  await fs.writeFile(path.join(projectPath, 'manifest.json'), requestBuffer(request));
+  // A successful manifest write completes legacy migration; remove the huge packed copy.
+  await fs.rm(path.join(directory, `${request.id}.bcs.json`), { force: true });
+  const catalog = await readProjectCatalog();
+  const previous = catalog.find((project) => project.id === request.id);
   const updated = {
     id: String(request.id),
     name: String(request.name),
@@ -227,7 +298,29 @@ ipcMain.handle('desktop:save-project-data', async (_event, request) => {
   };
   await writeProjectCatalog([
     updated,
-    ...(await readProjectCatalog()).filter((project) => project.id !== request.id),
+    ...catalog.filter((project) => project.id !== request.id),
+  ]);
+  return 'ok';
+});
+
+ipcMain.handle('desktop:save-project-data', async (_event, request) => {
+  const directory = await projectDirectory();
+  await fs.writeFile(
+    path.join(directory, `${request.id}.bcs.json`),
+    requestBuffer(request),
+  );
+  const catalog = await readProjectCatalog();
+  const previous = catalog.find((project) => project.id === request.id);
+  const updated = {
+    id: String(request.id),
+    name: String(request.name),
+    updatedAt: new Date().toISOString(),
+    hasData: true,
+    thumbnailBase64: request.thumbnailBase64 || previous?.thumbnailBase64 || null,
+  };
+  await writeProjectCatalog([
+    updated,
+    ...catalog.filter((project) => project.id !== request.id),
   ]);
   return 'ok';
 });
@@ -236,7 +329,7 @@ ipcMain.handle('desktop:load-project-edits', async (_event, request) => {
   try {
     const directory = await projectDirectory();
     const bytes = await fs.readFile(path.join(directory, `${request.id}.edits.json`));
-    return bytes.toString('base64');
+    return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   } catch {
     return null;
   }
@@ -246,9 +339,10 @@ ipcMain.handle('desktop:save-project-edits', async (_event, request) => {
   const directory = await projectDirectory();
   await fs.writeFile(
     path.join(directory, `${request.id}.edits.json`),
-    Buffer.from(request.base64, 'base64'),
+    requestBuffer(request),
   );
-  const previous = (await readProjectCatalog()).find((project) => project.id === request.id);
+  const catalog = await readProjectCatalog();
+  const previous = catalog.find((project) => project.id === request.id);
   const updated = {
     id: String(request.id),
     name: String(request.name),
@@ -258,7 +352,7 @@ ipcMain.handle('desktop:save-project-edits', async (_event, request) => {
   };
   await writeProjectCatalog([
     updated,
-    ...(await readProjectCatalog()).filter((project) => project.id !== request.id),
+    ...catalog.filter((project) => project.id !== request.id),
   ]);
   return 'ok';
 });
@@ -267,6 +361,7 @@ ipcMain.handle('desktop:delete-project', async (_event, request) => {
   const directory = await projectDirectory();
   await fs.rm(path.join(directory, `${request.id}.bcs.json`), { force: true });
   await fs.rm(path.join(directory, `${request.id}.edits.json`), { force: true });
+  await fs.rm(path.join(directory, storageName(request.id)), { recursive: true, force: true });
   await writeProjectCatalog(
     (await readProjectCatalog()).filter((project) => project.id !== request.id),
   );
@@ -332,14 +427,14 @@ ipcMain.handle('desktop:write-export-image', async (_event, request) => {
   await fs.mkdir(path.dirname(target), { recursive: true });
   if (!request.overwrite) {
     try {
-      await fs.writeFile(target, Buffer.from(request.base64, 'base64'), { flag: 'wx' });
+      await fs.writeFile(target, requestBuffer(request), { flag: 'wx' });
       return target;
     } catch (error) {
       if (error.code === 'EEXIST') throw new Error('目标图片已存在');
       throw error;
     }
   }
-  await fs.writeFile(target, Buffer.from(request.base64, 'base64'));
+  await fs.writeFile(target, requestBuffer(request));
   return target;
 });
 
@@ -357,6 +452,15 @@ ipcMain.handle('desktop:check-for-updates', async () => {
 });
 
 ipcMain.handle('desktop:get-update-status', () => JSON.stringify(updateState));
+
+ipcMain.handle('desktop:download-update', () => {
+  if (!installUpdateSupported || !autoUpdater || updateState.state !== 'available') {
+    return JSON.stringify(updateState);
+  }
+  setUpdateState({ state: 'downloading', message: '', progress: 0 });
+  void autoUpdater.downloadUpdate();
+  return JSON.stringify(updateState);
+});
 
 ipcMain.handle('desktop:install-update', () => {
   if (autoUpdater && updateState.state === 'downloaded') {

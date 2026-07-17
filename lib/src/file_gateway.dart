@@ -26,6 +26,9 @@ Future<String?> saveBinaryFile({
 
 Future<OpenedBinaryFile?> openProjectFile() => implementation.openProjectFile();
 
+Future<List<OpenedBinaryFile>?> pickImageFiles() =>
+    implementation.pickImageFiles();
+
 Future<String?> chooseImageExportDirectory({String? initialDirectory}) =>
     implementation.chooseImageExportDirectory(
       initialDirectory: initialDirectory,

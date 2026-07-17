@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -24,6 +25,7 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
   AppSettings _settings = const AppSettings();
   AppUpdateInfo? _updateInfo;
   Timer? _updatePoll;
+  final Map<String, ({String encoded, Uint8List bytes})> _thumbnailCache = {};
 
   @override
   void initState() {
@@ -43,7 +45,7 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
     final info = await checkForAppUpdate();
     if (!mounted) return;
     setState(() => _updateInfo = info);
-    if (const {'checking', 'available', 'downloading'}.contains(info.state)) {
+    if (info.state == 'downloading') {
       _updatePoll?.cancel();
       _updatePoll = Timer.periodic(const Duration(seconds: 1), (_) async {
         final next = await getAppUpdateStatus();
@@ -64,22 +66,41 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
     }
   }
 
+  Future<void> _downloadUpdate() async {
+    final info = await downloadAppUpdate();
+    if (!mounted) return;
+    setState(() => _updateInfo = info);
+    if (info.state != 'downloading') return;
+    _updatePoll?.cancel();
+    _updatePoll = Timer.periodic(const Duration(seconds: 2), (_) async {
+      final next = await getAppUpdateStatus();
+      if (!mounted) return;
+      setState(() => _updateInfo = next);
+      if (next.state != 'downloading') _updatePoll?.cancel();
+    });
+  }
+
   Widget _updateBanner() {
     final info = _updateInfo;
     if (info == null || !info.shouldShow) return const SizedBox.shrink();
     final downloaded = info.state == 'downloaded';
+    final available = info.state == 'available';
     final external = !info.installSupported || info.state == 'external';
     final progress = info.progress.clamp(0, 100).round();
     final title = downloaded
         ? '新版本 ${info.latestVersion} 已准备完成'
         : external
             ? '发现新版本 ${info.latestVersion}'
-            : '正在下载新版本 ${info.latestVersion} · $progress%';
+            : available
+                ? '发现新版本 ${info.latestVersion}'
+                : '正在下载新版本 ${info.latestVersion} · $progress%';
     final description = downloaded
         ? '点击后将关闭软件、安装更新并重新启动。项目数据不会被删除。'
         : external
             ? '当前平台请前往 GitHub Releases 下载最新版本。'
-            : '安装包正在后台下载，完成后可以直接在软件内安装。';
+            : available
+                ? '检测完成。只有点击下载后才会获取安装包，不再启动即后台下载。'
+                : '安装包正在后台下载，完成后可以直接在软件内安装。';
     return Container(
       width: double.infinity,
       color: AppColors.pink,
@@ -108,15 +129,29 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
               ],
             ),
           ),
-          if (downloaded || external)
+          if (downloaded || external || available)
             FilledButton.icon(
-              onPressed: () => installOrOpenAppUpdate(info),
+              onPressed: available
+                  ? _downloadUpdate
+                  : () => installOrOpenAppUpdate(info),
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: AppColors.pink,
               ),
-              icon: Icon(downloaded ? Icons.restart_alt : Icons.open_in_new),
-              label: Text(downloaded ? '立即安装并重启' : '前往 GitHub 更新'),
+              icon: Icon(
+                downloaded
+                    ? Icons.restart_alt
+                    : available
+                        ? Icons.download_outlined
+                        : Icons.open_in_new,
+              ),
+              label: Text(
+                downloaded
+                    ? '立即安装并重启'
+                    : available
+                        ? '下载更新'
+                        : '前往 GitHub 更新',
+              ),
             )
           else
             SizedBox(
@@ -147,6 +182,22 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
   Future<void> _refresh() async {
     final projects = await listLocalProjects();
     if (!mounted) return;
+    final activeIds = projects.map((project) => project.id).toSet();
+    _thumbnailCache.removeWhere((id, _) => !activeIds.contains(id));
+    for (final project in projects) {
+      final encoded = project.thumbnailBase64;
+      if (encoded == null || encoded.isEmpty) continue;
+      final cached = _thumbnailCache[project.id];
+      if (cached?.encoded == encoded) continue;
+      try {
+        _thumbnailCache[project.id] = (
+          encoded: encoded,
+          bytes: base64Decode(encoded),
+        );
+      } catch (_) {
+        _thumbnailCache.remove(project.id);
+      }
+    }
     setState(() {
       _projects = projects;
       _loading = false;
@@ -254,50 +305,45 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
   }
 
   Widget _projectCover(LocalProjectSummary project) {
-    final encoded = project.thumbnailBase64;
-    if (encoded != null && encoded.isNotEmpty) {
-      try {
-        return Semantics(
-          label: '项目第一张图片：${project.name}',
-          image: true,
-          child: Stack(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.memory(
-                  base64Decode(encoded),
-                  width: 96,
-                  height: 96,
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true,
-                ),
+    final thumbnail = _thumbnailCache[project.id];
+    if (thumbnail != null) {
+      return Semantics(
+        label: '项目第一张图片：${project.name}',
+        image: true,
+        child: Stack(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.memory(
+                thumbnail.bytes,
+                width: 96,
+                height: 96,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
               ),
-              Positioned(
-                left: 6,
-                bottom: 6,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(.72),
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: const Text(
-                    '首图',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
+            ),
+            Positioned(
+              left: 6,
+              bottom: 6,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(.72),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: const Text(
+                  '首图',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-            ],
-          ),
-        );
-      } catch (_) {
-        // Fall through to the placeholder for legacy or damaged thumbnails.
-      }
+            ),
+          ],
+        ),
+      );
     }
     return Container(
       width: 96,

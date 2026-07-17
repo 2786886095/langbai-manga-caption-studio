@@ -186,9 +186,15 @@ class _UpdateSettingsSectionState extends State<_UpdateSettingsSection> {
     _updateInfo(info);
   }
 
+  Future<void> _downloadUpdate() async {
+    final info = await downloadAppUpdate();
+    if (!mounted) return;
+    _updateInfo(info);
+  }
+
   void _updateInfo(AppUpdateInfo info) {
     setState(() => _info = info);
-    if (!const {'checking', 'available', 'downloading'}.contains(info.state)) {
+    if (!const {'checking', 'downloading'}.contains(info.state)) {
       _pollTimer?.cancel();
       return;
     }
@@ -197,8 +203,7 @@ class _UpdateSettingsSectionState extends State<_UpdateSettingsSection> {
       final next = await getAppUpdateStatus();
       if (!mounted) return;
       setState(() => _info = next);
-      if (!const {'checking', 'available', 'downloading'}
-          .contains(next.state)) {
+      if (!const {'checking', 'downloading'}.contains(next.state)) {
         _pollTimer?.cancel();
       }
     });
@@ -209,7 +214,7 @@ class _UpdateSettingsSectionState extends State<_UpdateSettingsSection> {
     if (_checking || info?.state == 'checking') return '正在检测更新…';
     if (info == null) return '正在读取更新状态…';
     return switch (info.state) {
-      'available' => '发现 ${info.latestVersion}，正在准备下载…',
+      'available' => '发现 ${info.latestVersion}，等待你确认下载',
       'downloading' =>
         '正在下载 ${info.latestVersion} · ${info.progress.clamp(0, 100).round()}%',
       'downloaded' => '${info.latestVersion} 已下载，可以立即安装',
@@ -224,6 +229,8 @@ class _UpdateSettingsSectionState extends State<_UpdateSettingsSection> {
   Widget build(BuildContext context) {
     final info = _info;
     final canInstall = info?.state == 'downloaded';
+    final canDownload =
+        info?.state == 'available' && info?.installSupported == true;
     final openGitHub = info?.state == 'external';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -241,25 +248,31 @@ class _UpdateSettingsSectionState extends State<_UpdateSettingsSection> {
           trailing: FilledButton.icon(
             onPressed: _checking
                 ? null
-                : canInstall || openGitHub
-                    ? () => installOrOpenAppUpdate(info!)
-                    : _checkForUpdates,
+                : canDownload
+                    ? _downloadUpdate
+                    : canInstall || openGitHub
+                        ? () => installOrOpenAppUpdate(info!)
+                        : _checkForUpdates,
             icon: Icon(
               canInstall
                   ? Icons.restart_alt
-                  : openGitHub
-                      ? Icons.open_in_new
-                      : Icons.refresh,
+                  : canDownload
+                      ? Icons.download_outlined
+                      : openGitHub
+                          ? Icons.open_in_new
+                          : Icons.refresh,
               size: 18,
             ),
             label: Text(
               canInstall
                   ? '安装并重启'
-                  : openGitHub
-                      ? '前往 GitHub'
-                      : _checking
-                          ? '检测中'
-                          : '检测更新',
+                  : canDownload
+                      ? '下载更新'
+                      : openGitHub
+                          ? '前往 GitHub'
+                          : _checking
+                              ? '检测中'
+                              : '检测更新',
             ),
           ),
         ),

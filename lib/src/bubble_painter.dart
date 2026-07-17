@@ -94,6 +94,7 @@ class PagePainter extends CustomPainter {
     this.selectedIndex,
     this.showBubbles = true,
     this.sourceImage,
+    super.repaint,
   }) : _paintSignature = Object.hashAll([
           page.image,
           sourceImage,
@@ -120,6 +121,7 @@ class PagePainter extends CustomPainter {
   final bool showBubbles;
   final ui.Image? sourceImage;
   final int _paintSignature;
+  final Map<int, ({int signature, TextPainter painter})> _textCache = {};
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -148,7 +150,7 @@ class PagePainter extends CustomPainter {
         bubble.width * sx,
         bubble.height * sy,
       );
-      _drawBubble(canvas, rect, bubble, sx, sy, selectedIndex == i);
+      _drawBubble(canvas, rect, bubble, sx, sy, selectedIndex == i, i);
     }
   }
 
@@ -159,6 +161,7 @@ class PagePainter extends CustomPainter {
     double sx,
     double sy,
     bool selected,
+    int bubbleIndex,
   ) {
     final fillColor = bubble.shape == BubbleShape.rounded
         ? const Color(0xfff5f5f3)
@@ -227,12 +230,34 @@ class PagePainter extends CustomPainter {
           ellipsis: '…',
         )..layout(maxWidth: rect.width * textWidthFactor);
 
-    var fittedSize = (bubble.fontSize * sy).clamp(12.0, 64.0);
-    var painter = createTextPainter(fittedSize);
-    final availableHeight = rect.height * textHeightFactor;
-    while (painter.height > availableHeight && fittedSize > 12) {
-      fittedSize -= 1;
-      painter = createTextPainter(fittedSize);
+    final textSignature = Object.hash(
+      bubble.caption.text,
+      bubble.fontSize,
+      bubble.fontFamily,
+      bubble.fontColorValue,
+      bubble.lineHeight,
+      bubble.shape,
+      rect.width,
+      rect.height,
+      sy,
+    );
+    final cached = _textCache[bubbleIndex];
+    late final TextPainter painter;
+    if (cached != null && cached.signature == textSignature) {
+      painter = cached.painter;
+    } else {
+      var fittedSize = (bubble.fontSize * sy).clamp(12.0, 64.0);
+      var fittedPainter = createTextPainter(fittedSize);
+      final availableHeight = rect.height * textHeightFactor;
+      while (fittedPainter.height > availableHeight && fittedSize > 12) {
+        fittedSize -= 1;
+        fittedPainter = createTextPainter(fittedSize);
+      }
+      painter = fittedPainter;
+      _textCache[bubbleIndex] = (
+        signature: textSignature,
+        painter: painter,
+      );
     }
     painter.paint(
       canvas,

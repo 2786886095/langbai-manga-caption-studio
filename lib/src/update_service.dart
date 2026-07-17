@@ -65,6 +65,14 @@ Future<AppUpdateInfo> getAppUpdateStatus() async {
   return _checkGitHubRelease();
 }
 
+Future<AppUpdateInfo> downloadAppUpdate() async {
+  final desktop = await invokeDesktopUpdate('downloadUpdate');
+  if (desktop != null) {
+    return AppUpdateInfo.fromJson(jsonDecode(desktop));
+  }
+  return getAppUpdateStatus();
+}
+
 Future<AppUpdateInfo> _checkGitHubRelease() async {
   final package = await PackageInfo.fromPlatform();
   try {

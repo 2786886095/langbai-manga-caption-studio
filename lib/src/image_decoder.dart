@@ -10,6 +10,13 @@ class DecodedPreview {
   final int originalHeight;
 }
 
+int previewDimensionForPageCount(int pageCount) {
+  if (pageCount >= 80) return 384;
+  if (pageCount >= 40) return 512;
+  if (pageCount >= 20) return 640;
+  return 768;
+}
+
 /// Decodes a memory-friendly editing preview while preserving source dimensions.
 Future<DecodedPreview> decodeImagePreview(
   Uint8List bytes, {

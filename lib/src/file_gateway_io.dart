@@ -28,6 +28,20 @@ Future<OpenedBinaryFile?> openProjectFile() async {
   return OpenedBinaryFile(name: file.name, bytes: file.bytes!, path: file.path);
 }
 
+Future<List<OpenedBinaryFile>?> pickImageFiles() async {
+  final result = await FilePicker.platform.pickFiles(
+    type: FileType.image,
+    allowMultiple: true,
+    withData: true,
+  );
+  if (result == null) return null;
+  return [
+    for (final file in result.files)
+      if (file.bytes != null)
+        OpenedBinaryFile(name: file.name, bytes: file.bytes!, path: file.path),
+  ];
+}
+
 Future<String?> chooseImageExportDirectory({String? initialDirectory}) =>
     FilePicker.platform.getDirectoryPath(
       dialogTitle: '选择成图导出文件夹',

@@ -21,15 +21,46 @@ Uint8List encodeProject(
   String script, {
   Map<String, Uint8List> fonts = const {},
 }) {
+  return _encodeProjectDocument(
+    pages,
+    script,
+    fonts: fonts,
+    format: 'bubble-caption-studio',
+    includeImages: true,
+  );
+}
+
+Uint8List encodeProjectManifest(
+  List<ImagePage> pages,
+  String script, {
+  Map<String, Uint8List> fonts = const {},
+}) =>
+    _encodeProjectDocument(
+      pages,
+      script,
+      fonts: fonts,
+      format: 'bubble-caption-studio-manifest',
+      includeImages: false,
+    );
+
+Uint8List _encodeProjectDocument(
+  List<ImagePage> pages,
+  String script, {
+  required Map<String, Uint8List> fonts,
+  required String format,
+  required bool includeImages,
+}) {
   final json = <String, Object?>{
-    'format': 'bubble-caption-studio',
+    'format': format,
     'schemaVersion': 2,
     'savedAt': DateTime.now().toUtc().toIso8601String(),
     'script': script,
     'fonts': {
       for (final entry in fonts.entries) entry.key: base64Encode(entry.value),
     },
-    'pages': pages.map(_encodePage).toList(),
+    'pages': [
+      for (final page in pages) _encodePage(page, includeImage: includeImages),
+    ],
   };
   return Uint8List.fromList(utf8.encode(jsonEncode(json)));
 }
@@ -78,13 +109,17 @@ Map<String, Object?> _encodePlacement(BubblePlacement bubble) => {
       'fontColorValue': bubble.fontColorValue,
     };
 
-Map<String, Object?> _encodePage(ImagePage page) => {
+Map<String, Object?> _encodePage(
+  ImagePage page, {
+  bool includeImage = true,
+}) =>
+    {
       'pageId': page.pageId,
       'orderRank': page.orderRank,
       'name': page.name,
       'originalWidth': page.originalWidth,
       'originalHeight': page.originalHeight,
-      'sourceImage': base64Encode(page.bytes),
+      if (includeImage) 'sourceImage': base64Encode(page.bytes),
       'approved': page.approved,
       'captions': [
         for (final caption in page.captions)
@@ -166,11 +201,32 @@ Future<ProjectData> decodeProject(Uint8List bytes) async {
       (root['schemaVersion'] != 1 && root['schemaVersion'] != 2)) {
     throw const FormatException('不是受支持的气泡字幕工程文件');
   }
+  return _decodeProjectRoot(root);
+}
+
+Future<ProjectData> decodeProjectManifest(
+  Uint8List bytes,
+  Future<Uint8List> Function(String pageId) loadImage,
+) async {
+  final root = jsonDecode(utf8.decode(bytes));
+  if (root is! Map<String, dynamic> ||
+      root['format'] != 'bubble-caption-studio-manifest' ||
+      root['schemaVersion'] != 2) {
+    throw const FormatException('不是受支持的增量工程清单');
+  }
+  return _decodeProjectRoot(root, loadImage: loadImage);
+}
+
+Future<ProjectData> _decodeProjectRoot(
+  Map<String, dynamic> root, {
+  Future<Uint8List> Function(String pageId)? loadImage,
+}) async {
   final rawPages = root['pages'];
   if (rawPages is! List || rawPages.isEmpty) {
     throw const FormatException('工程中没有图片页面');
   }
   final pages = <ImagePage>[];
+  final previewDimension = previewDimensionForPageCount(rawPages.length);
   final fonts = <String, Uint8List>{};
   final rawFonts = root['fonts'];
   if (rawFonts is Map<String, dynamic>) {
@@ -188,67 +244,85 @@ Future<ProjectData> decodeProject(Uint8List bytes) async {
       }
     }
   }
-  for (final raw in rawPages) {
-    if (raw is! Map<String, dynamic>) continue;
-    final imageBytes = base64Decode(raw['sourceImage'] as String);
-    final preview = await decodeImagePreview(imageBytes);
-    final page = ImagePage(
-      name: raw['name'] as String,
-      bytes: imageBytes,
-      image: preview.image,
-      originalWidth: preview.originalWidth,
-      originalHeight: preview.originalHeight,
-      pageId: raw['pageId']?.toString(),
-      orderRank: (raw['orderRank'] as num?)?.toInt() ?? pages.length,
-    )..approved = raw['approved'] == true;
-    final declaredWidth = (raw['originalWidth'] as num?)?.toInt();
-    final declaredHeight = (raw['originalHeight'] as num?)?.toInt();
-    if ((declaredWidth != null && declaredWidth != page.originalWidth) ||
-        (declaredHeight != null && declaredHeight != page.originalHeight)) {
-      throw FormatException('${page.name} 的原图尺寸记录与图片数据不一致');
-    }
-    final rawCaptions = raw['captions'] as List? ?? const [];
-    page.captions = [
-      for (final item in rawCaptions.whereType<Map<String, dynamic>>())
-        CaptionLine(
-          speaker: item['speaker']?.toString() ?? '',
-          text: item['text']?.toString() ?? '',
-          bubbleId: item['bubbleId']?.toString() ?? '',
-        ),
-    ];
-    final rawPlacements = raw['placements'] as List? ?? const [];
-    for (var i = 0; i < rawPlacements.length && i < page.captions.length; i++) {
-      final item = rawPlacements[i];
-      if (item is! Map<String, dynamic>) continue;
-      page.placements.add(
-        BubblePlacement(
-          caption: page.captions[i],
-          x: _number(item, 'x'),
-          y: _number(item, 'y'),
-          width: _number(item, 'width'),
-          height: _number(item, 'height'),
-          shape: _enumValue(
-            BubbleShape.values,
-            item['shape'],
-            BubbleShape.ellipse,
-          ),
-          tailX: .5,
-          tailY: _number(item, 'tailY', 1.15),
-          tailDirection: _decodeTailDirection(item['tailDirection']),
-          fontSize: _number(item, 'fontSize', 34),
-          lineHeight: _number(item, 'lineHeight', 1.25),
-          strokeWidth: _number(item, 'strokeWidth', 3),
-          fillOpacity: _number(item, 'fillOpacity', 1).clamp(0, 1),
-          fontFamily: item['fontFamily']?.toString() ?? 'Microsoft YaHei',
-          fontColorValue:
-              (item['fontColorValue'] as num?)?.toInt() ?? 0xff141518,
-        ),
+  try {
+    for (final raw in rawPages) {
+      if (raw is! Map<String, dynamic>) continue;
+      final pageId = raw['pageId']?.toString();
+      if (pageId == null || pageId.isEmpty) {
+        throw const FormatException('工程图片缺少 pageId');
+      }
+      final imageBytes = loadImage == null
+          ? base64Decode(raw['sourceImage'] as String)
+          : await loadImage(pageId);
+      final preview = await decodeImagePreview(
+        imageBytes,
+        maxDimension: previewDimension,
       );
+      final page = ImagePage(
+        name: raw['name'] as String,
+        bytes: imageBytes,
+        image: preview.image,
+        originalWidth: preview.originalWidth,
+        originalHeight: preview.originalHeight,
+        pageId: pageId,
+        orderRank: (raw['orderRank'] as num?)?.toInt() ?? pages.length,
+      )..approved = raw['approved'] == true;
+      pages.add(page);
+      final declaredWidth = (raw['originalWidth'] as num?)?.toInt();
+      final declaredHeight = (raw['originalHeight'] as num?)?.toInt();
+      if ((declaredWidth != null && declaredWidth != page.originalWidth) ||
+          (declaredHeight != null && declaredHeight != page.originalHeight)) {
+        throw FormatException('${page.name} 的原图尺寸记录与图片数据不一致');
+      }
+      final rawCaptions = raw['captions'] as List? ?? const [];
+      page.captions = [
+        for (final item in rawCaptions.whereType<Map<String, dynamic>>())
+          CaptionLine(
+            speaker: item['speaker']?.toString() ?? '',
+            text: item['text']?.toString() ?? '',
+            bubbleId: item['bubbleId']?.toString() ?? '',
+          ),
+      ];
+      final rawPlacements = raw['placements'] as List? ?? const [];
+      for (var i = 0;
+          i < rawPlacements.length && i < page.captions.length;
+          i++) {
+        final item = rawPlacements[i];
+        if (item is! Map<String, dynamic>) continue;
+        page.placements.add(
+          BubblePlacement(
+            caption: page.captions[i],
+            x: _number(item, 'x'),
+            y: _number(item, 'y'),
+            width: _number(item, 'width'),
+            height: _number(item, 'height'),
+            shape: _enumValue(
+              BubbleShape.values,
+              item['shape'],
+              BubbleShape.ellipse,
+            ),
+            tailX: .5,
+            tailY: _number(item, 'tailY', 1.15),
+            tailDirection: _decodeTailDirection(item['tailDirection']),
+            fontSize: _number(item, 'fontSize', 34),
+            lineHeight: _number(item, 'lineHeight', 1.25),
+            strokeWidth: _number(item, 'strokeWidth', 3),
+            fillOpacity: _number(item, 'fillOpacity', 1).clamp(0, 1),
+            fontFamily: item['fontFamily']?.toString() ?? 'Microsoft YaHei',
+            fontColorValue:
+                (item['fontColorValue'] as num?)?.toInt() ?? 0xff141518,
+          ),
+        );
+      }
+      if (page.captions.length != page.placements.length) {
+        throw FormatException('${page.name} 的字幕与气泡数量不一致');
+      }
     }
-    if (page.captions.length != page.placements.length) {
-      throw FormatException('${page.name} 的字幕与气泡数量不一致');
+  } catch (_) {
+    for (final page in pages) {
+      page.dispose();
     }
-    pages.add(page);
+    rethrow;
   }
   if (pages.isEmpty) throw const FormatException('工程中没有可读取的页面');
   pages.sort((a, b) => a.orderRank.compareTo(b.orderRank));

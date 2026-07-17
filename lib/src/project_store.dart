@@ -46,6 +46,35 @@ Future<LocalProjectSummary> createLocalProject(String name) =>
 Future<Uint8List?> loadLocalProject(String id) =>
     implementation.loadLocalProject(id);
 
+bool get supportsIncrementalProjectStorage =>
+    implementation.supportsIncrementalProjectStorage;
+
+Future<Uint8List?> loadLocalProjectManifest(String id) =>
+    implementation.loadLocalProjectManifest(id);
+
+Future<Uint8List> loadLocalProjectImage(String id, String pageId) =>
+    implementation.loadLocalProjectImage(id, pageId);
+
+Future<void> saveLocalProjectImage(
+  String id,
+  String pageId,
+  Uint8List bytes,
+) =>
+    implementation.saveLocalProjectImage(id, pageId, bytes);
+
+Future<void> saveLocalProjectManifest(
+  String id,
+  String name,
+  Uint8List bytes, {
+  String? thumbnailBase64,
+}) =>
+    implementation.saveLocalProjectManifest(
+      id,
+      name,
+      bytes,
+      thumbnailBase64: thumbnailBase64,
+    );
+
 Future<void> saveLocalProject(
   String id,
   String name,

@@ -231,6 +231,8 @@ class ImagePage {
   }
 
   double get aspectRatio => originalWidth / originalHeight;
+
+  void dispose() => image.dispose();
 }
 
 int _pageIdCounter = 0;

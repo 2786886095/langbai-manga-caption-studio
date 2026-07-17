@@ -69,14 +69,18 @@ class _ProjectSnapshot {
     List<ImagePage> pages,
     int selectedPage,
     int selectedBubble,
+    Iterable<int> pageIndexes,
   ) =>
       _ProjectSnapshot(
-        pages: pages.map(_PageEditState.capture).toList(),
+        pages: {
+          for (final index in pageIndexes)
+            index: _PageEditState.capture(pages[index]),
+        },
         selectedPage: selectedPage,
         selectedBubble: selectedBubble,
       );
 
-  final List<_PageEditState> pages;
+  final Map<int, _PageEditState> pages;
   final int selectedPage;
   final int selectedBubble;
 }
@@ -133,6 +137,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   final List<ImagePage> _pages = [];
   final List<_ProjectSnapshot> _undoStack = [];
   final List<_ProjectSnapshot> _redoStack = [];
+  final ValueNotifier<int> _canvasRevision = ValueNotifier(0);
   int _selectedPage = 0;
   int _selectedBubble = 0;
   bool _processing = true;
@@ -148,6 +153,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   _DragMode? _hoverMode;
   bool _selectionVisible = true;
   bool _structureDirty = false;
+  int _editRevision = 0;
   Timer? _autosaveTimer;
   AppSettings _settings = const AppSettings();
   final List<String> _importedFonts = [];
@@ -181,15 +187,17 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 
   void _configureAutosave() {
     _autosaveTimer?.cancel();
+    if (_settings.autoSave && _dirty) _scheduleAutosave();
+  }
+
+  void _scheduleAutosave() {
+    _autosaveTimer?.cancel();
     if (!_settings.autoSave) return;
-    _autosaveTimer = Timer.periodic(
-      Duration(seconds: _settings.autoSaveSeconds),
-      (_) {
-        if (_dirty && !_saving && !_processing) {
-          unawaited(_persistLocalProject());
-        }
-      },
-    );
+    _autosaveTimer = Timer(Duration(seconds: _settings.autoSaveSeconds), () {
+      if (_dirty && !_saving && !_processing) {
+        unawaited(_persistLocalProject());
+      }
+    });
   }
 
   Future<void> _showSettings() async {
@@ -219,7 +227,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         setState(() {
           _importedFonts.add(family);
           _fontBytes[family] = Uint8List.fromList(bytes);
-          _dirty = true;
+          _markDirty();
           _structureDirty = true;
         });
       }
@@ -270,18 +278,43 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   void dispose() {
     _autosaveTimer?.cancel();
     if (_dirty && _pages.isNotEmpty) unawaited(_persistLocalProject());
+    _disposePages(_pages);
+    _canvasRevision.dispose();
     _script.dispose();
     super.dispose();
   }
 
+  void _disposePages(Iterable<ImagePage> pages) {
+    for (final page in pages) {
+      page.dispose();
+    }
+  }
+
+  void _markDirty() {
+    _editRevision++;
+    _dirty = true;
+    _scheduleAutosave();
+  }
+
   Future<void> _loadStoredProject() async {
     try {
-      final bytes = await loadLocalProject(widget.projectId);
-      if (bytes == null) {
+      final manifest = supportsIncrementalProjectStorage
+          ? await loadLocalProjectManifest(widget.projectId)
+          : null;
+      final legacyBytes =
+          manifest == null ? await loadLocalProject(widget.projectId) : null;
+      if (manifest == null && legacyBytes == null) {
         if (mounted) setState(() => _processing = false);
         return;
       }
-      final project = await decodeProject(bytes);
+      final project = manifest != null
+          ? await decodeProjectManifest(
+              manifest,
+              (pageId) => loadLocalProjectImage(widget.projectId, pageId),
+            )
+          : await decodeProject(legacyBytes!);
+      final needsMigration =
+          manifest == null && supportsIncrementalProjectStorage;
       final thumbnail = project.pages.isEmpty
           ? null
           : await encodeThumbnailBase64(project.pages.first.image);
@@ -295,7 +328,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         }
       }
       _ensureBubbleIds(project.pages);
-      if (!mounted) return;
+      if (!mounted) {
+        _disposePages(project.pages);
+        return;
+      }
       setState(() {
         _pages
           ..clear()
@@ -313,8 +349,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         _selectionVisible =
             _pages.isNotEmpty && _pages.first.placements.isNotEmpty;
         _processing = false;
-        _dirty = false;
-        _structureDirty = false;
+        _dirty = needsMigration;
+        _editRevision = 0;
+        _structureDirty = needsMigration;
       });
       await saveLocalProjectEdits(
         widget.projectId,
@@ -322,6 +359,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         encodeProjectEdits(project.pages, _script.text),
         thumbnailBase64: thumbnail,
       );
+      if (needsMigration) await _persistLocalProject(forceFull: true);
     } catch (error) {
       if (!mounted) return;
       setState(() => _processing = false);
@@ -344,15 +382,20 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   Future<void> _persistLocalProject({bool forceFull = false}) async {
     if (_pages.isEmpty || _saving) return;
     _saving = true;
+    final savingRevision = _editRevision;
+    final savingStructure = forceFull || _structureDirty;
     try {
-      if (forceFull || _structureDirty) {
-        await saveLocalProject(
-          widget.projectId,
-          widget.projectName,
-          encodeProject(_pages, _script.text, fonts: _fontBytes),
-          thumbnailBase64: _projectThumbnailBase64,
-        );
-        _structureDirty = false;
+      if (savingStructure) {
+        if (supportsIncrementalProjectStorage) {
+          await _saveIncrementalProject();
+        } else {
+          await saveLocalProject(
+            widget.projectId,
+            widget.projectName,
+            encodeProject(_pages, _script.text, fonts: _fontBytes),
+            thumbnailBase64: _projectThumbnailBase64,
+          );
+        }
       }
       await saveLocalProjectEdits(
         widget.projectId,
@@ -360,10 +403,29 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         encodeProjectEdits(_pages, _script.text),
         thumbnailBase64: _projectThumbnailBase64,
       );
-      if (mounted) setState(() => _dirty = false);
+      if (mounted && savingRevision == _editRevision) {
+        setState(() {
+          _dirty = false;
+          if (savingStructure) _structureDirty = false;
+        });
+      }
     } finally {
       _saving = false;
+      if (_dirty) _scheduleAutosave();
     }
+  }
+
+  Future<void> _saveIncrementalProject() async {
+    for (final page in _pages) {
+      await saveLocalProjectImage(widget.projectId, page.pageId, page.bytes);
+      await Future<void>.delayed(Duration.zero);
+    }
+    await saveLocalProjectManifest(
+      widget.projectId,
+      widget.projectName,
+      encodeProjectManifest(_pages, _script.text, fonts: _fontBytes),
+      thumbnailBase64: _projectThumbnailBase64,
+    );
   }
 
   Future<void> _returnToProjects() async {
@@ -464,25 +526,21 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       );
       if (discard != true) return;
     }
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      allowMultiple: true,
-      withData: true,
-    );
-    if (result == null) return;
+    final pickedFiles = await pickImageFiles();
+    if (pickedFiles == null) return;
     setState(() => _processing = true);
     final pages = <ImagePage>[];
     final failed = <String>[];
-    for (final file in result.files) {
+    final previewDimension = previewDimensionForPageCount(pickedFiles.length);
+    for (final file in pickedFiles) {
       final name = file.name;
       final bytes = file.bytes;
-      if (bytes == null) {
-        failed.add(name);
-        continue;
-      }
       try {
-        final sourceBytes = Uint8List.fromList(bytes);
-        final preview = await decodeImagePreview(sourceBytes);
+        final sourceBytes = bytes;
+        final preview = await decodeImagePreview(
+          sourceBytes,
+          maxDimension: previewDimension,
+        );
         pages.add(
           ImagePage(
             name: name,
@@ -504,13 +562,21 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       ).showSnackBar(SnackBar(content: Text('没有读取到有效图片，请检查文件格式或文件是否损坏。')));
       return;
     }
-    if (!mounted) return;
+    if (!mounted) {
+      _disposePages(pages);
+      return;
+    }
     setState(() => _processing = false);
     pages.sort((a, b) => compareNaturalNames(a.name, b.name));
     final orderedPages = await _confirmImageOrder(pages);
-    if (orderedPages == null || !mounted) return;
+    if (orderedPages == null || !mounted) {
+      _disposePages(pages);
+      return;
+    }
     final existingCount = replace ? 0 : _pages.length;
     final selectedPageId = orderedPages.first.pageId;
+    final replacedPages =
+        replace ? List<ImagePage>.of(_pages) : const <ImagePage>[];
     setState(() {
       final merged = mergeImagePages(_pages, orderedPages, replace: replace);
       _pages
@@ -523,12 +589,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       _selectionVisible = true;
       _processing = false;
       if (replace) _projectName = '未命名工程';
-      _dirty = true;
+      _markDirty();
       _structureDirty = true;
       _isDemoProject = false;
       _undoStack.clear();
       _redoStack.clear();
     });
+    _disposePages(replacedPages);
     _script.text = _scriptForPages(_pages);
     _projectThumbnailBase64 = await encodeThumbnailBase64(_pages.first.image);
     await _persistLocalProject(forceFull: true);
@@ -659,7 +726,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     setState(() {
       _selectedBubble = 0;
       _selectionVisible = _page?.placements.isNotEmpty ?? false;
-      _dirty = true;
+      _markDirty();
     });
     if (migratedLegacy) _script.text = _scriptForPages(_pages);
     final bubbleCount = _pages.fold<int>(
@@ -697,7 +764,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   void _resetCurrentPageLayout() {
     final page = _page;
     if (page == null || page.captions.isEmpty) return;
-    _remember();
+    _remember(currentPageOnly: true);
     setState(() {
       page.placements = _engine.arrange(
         page.captions,
@@ -707,7 +774,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       page.approved = false;
       _selectedBubble = 0;
       _selectionVisible = true;
-      _dirty = true;
+      _markDirty();
     });
     ScaffoldMessenger.of(
       context,
@@ -757,7 +824,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       }
       _selectedBubble = 0;
       _selectionVisible = _page?.placements.isNotEmpty ?? false;
-      _dirty = true;
+      _markDirty();
     });
     ScaffoldMessenger.of(context).showSnackBar(
       _quickFeedback(
@@ -766,10 +833,17 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     );
   }
 
-  void _remember() {
+  void _remember({bool currentPageOnly = false}) {
     if (_pages.isEmpty) return;
     _undoStack.add(
-      _ProjectSnapshot.capture(_pages, _selectedPage, _selectedBubble),
+      _ProjectSnapshot.capture(
+        _pages,
+        _selectedPage,
+        _selectedBubble,
+        currentPageOnly
+            ? [_selectedPage]
+            : List.generate(_pages.length, (i) => i),
+      ),
     );
     if (_undoStack.length > 50) _undoStack.removeAt(0);
     _redoStack.clear();
@@ -777,45 +851,66 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 
   void _undo() {
     if (_pages.isEmpty || _undoStack.isEmpty) return;
+    final snapshot = _undoStack.removeLast();
     _redoStack.add(
-      _ProjectSnapshot.capture(_pages, _selectedPage, _selectedBubble),
+      _ProjectSnapshot.capture(
+        _pages,
+        _selectedPage,
+        _selectedBubble,
+        snapshot.pages.keys,
+      ),
     );
-    _restoreSnapshot(_undoStack.removeLast());
+    _restoreSnapshot(snapshot);
   }
 
   void _redo() {
     if (_pages.isEmpty || _redoStack.isEmpty) return;
+    final snapshot = _redoStack.removeLast();
     _undoStack.add(
-      _ProjectSnapshot.capture(_pages, _selectedPage, _selectedBubble),
+      _ProjectSnapshot.capture(
+        _pages,
+        _selectedPage,
+        _selectedBubble,
+        snapshot.pages.keys,
+      ),
     );
-    _restoreSnapshot(_redoStack.removeLast());
+    _restoreSnapshot(snapshot);
   }
 
   void _restoreSnapshot(_ProjectSnapshot snapshot) {
-    if (snapshot.pages.length != _pages.length) return;
     setState(() {
-      for (var i = 0; i < _pages.length; i++) {
-        snapshot.pages[i].restore(_pages[i]);
+      for (final entry in snapshot.pages.entries) {
+        if (entry.key < _pages.length) entry.value.restore(_pages[entry.key]);
       }
       _selectedPage = snapshot.selectedPage.clamp(0, _pages.length - 1);
       final count = _pages[_selectedPage].placements.length;
       _selectedBubble =
           count == 0 ? 0 : snapshot.selectedBubble.clamp(0, count - 1);
       _selectionVisible = count > 0;
-      _dirty = true;
+      _markDirty();
     });
   }
 
   void _replaceBubble(BubblePlacement bubble, {bool remember = false}) {
     final page = _page;
     if (page == null || page.placements.isEmpty) return;
-    if (remember) _remember();
+    if (remember) _remember(currentPageOnly: true);
     setState(() {
       page.placements[_selectedBubble] = bubble;
       page.captions[_selectedBubble] = bubble.caption;
       page.approved = false;
-      _dirty = true;
+      _markDirty();
     });
+  }
+
+  void _replaceBubbleDuringDrag(BubblePlacement bubble) {
+    final page = _page;
+    if (page == null || page.placements.isEmpty) return;
+    page.placements[_selectedBubble] = bubble;
+    page.captions[_selectedBubble] = bubble.caption;
+    page.approved = false;
+    _markDirty();
+    _canvasRevision.value++;
   }
 
   Future<void> _applySelectedStyleToAll(BubblePlacement source) async {
@@ -931,7 +1026,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         changed++;
       }
     }
-    setState(() => _dirty = true);
+    setState(_markDirty);
     ScaffoldMessenger.of(context).showSnackBar(
       _quickFeedback('已将 ${selected.length} 项属性应用到 $changed 个气泡'),
     );
@@ -940,7 +1035,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   void _addBubble() {
     final page = _page;
     if (page == null) return;
-    _remember();
+    _remember(currentPageOnly: true);
     final index = page.placements.length;
     final caption = CaptionLine(
       speaker: '',
@@ -969,7 +1064,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       _selectedBubble = page.placements.length - 1;
       _selectionVisible = true;
       page.approved = false;
-      _dirty = true;
+      _markDirty();
     });
   }
 
@@ -977,7 +1072,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     final page = _page;
     final source = _bubble;
     if (page == null || source == null) return;
-    _remember();
+    _remember(currentPageOnly: true);
     final caption = source.caption.copyWith(
       text: '${source.caption.text}（副本）',
       bubbleId: '${page.pageId}-b${DateTime.now().microsecondsSinceEpoch}',
@@ -993,14 +1088,14 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       _selectedBubble = page.placements.length - 1;
       _selectionVisible = true;
       page.approved = false;
-      _dirty = true;
+      _markDirty();
     });
   }
 
   void _deleteBubble() {
     final page = _page;
     if (page == null || page.placements.isEmpty) return;
-    _remember();
+    _remember(currentPageOnly: true);
     setState(() {
       page.placements.removeAt(_selectedBubble);
       page.captions.removeAt(_selectedBubble);
@@ -1009,7 +1104,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           : _selectedBubble.clamp(0, page.placements.length - 1);
       _selectionVisible = page.placements.isNotEmpty;
       page.approved = false;
-      _dirty = true;
+      _markDirty();
     });
   }
 
@@ -1021,7 +1116,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       page.placements.length - 1,
     );
     if (target == _selectedBubble) return;
-    _remember();
+    _remember(currentPageOnly: true);
     setState(() {
       final bubble = page.placements.removeAt(_selectedBubble);
       final caption = page.captions.removeAt(_selectedBubble);
@@ -1029,7 +1124,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       page.captions.insert(target, caption);
       _selectedBubble = target;
       page.approved = false;
-      _dirty = true;
+      _markDirty();
     });
   }
 
@@ -1045,6 +1140,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     if (_pages.isEmpty || _exporting) return;
     final selectedIndexes = await _chooseExportPages();
     if (selectedIndexes == null || selectedIndexes.isEmpty || !mounted) return;
+    if (!await _confirmLargeExport(selectedIndexes) || !mounted) return;
     final directory = await chooseImageExportDirectory(
       initialDirectory:
           _settings.exportDirectory.isEmpty ? null : _settings.exportDirectory,
@@ -1084,7 +1180,6 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           overwrite: overwrite,
         );
         exported++;
-        if (mounted) setState(() {});
         await Future<void>.delayed(Duration.zero);
       }
       if (mounted) {
@@ -1103,6 +1198,44 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
+  }
+
+  Future<bool> _confirmLargeExport(List<int> indexes) async {
+    var largestBytes = 0;
+    ImagePage? largestPage;
+    for (final index in indexes) {
+      final page = _pages[index];
+      final estimate = page.originalWidth * page.originalHeight * 4;
+      if (estimate > largestBytes) {
+        largestBytes = estimate;
+        largestPage = page;
+      }
+    }
+    const warningThreshold = 220 * 1024 * 1024;
+    if (largestBytes < warningThreshold || largestPage == null) return true;
+    final megabytes = (largestBytes / 1024 / 1024).round();
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('检测到超大图片'),
+            content: Text(
+              '${largestPage!.name} 为 ${largestPage.originalWidth} × ${largestPage.originalHeight}。'
+              '单张渲染画布至少需要约 $megabytes MB 内存，PNG 编码期间还会额外占用内存。\n\n'
+              '软件会逐张导出且使用二进制写盘，但该图片编码时仍可能短暂停顿。建议先关闭其他大型程序。',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('继续逐张导出'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   Future<List<int>?> _chooseExportPages() async {
@@ -1239,6 +1372,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   Future<void> _saveProject() async {
     if (_pages.isEmpty || _saving) return;
     setState(() => _saving = true);
+    final savingRevision = _editRevision;
     try {
       final projectBytes = encodeProject(
         _pages,
@@ -1255,12 +1389,16 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         kind: 'project',
       );
       if (!mounted || path == null) return;
-      await saveLocalProject(
-        widget.projectId,
-        widget.projectName,
-        projectBytes,
-        thumbnailBase64: _projectThumbnailBase64,
-      );
+      if (supportsIncrementalProjectStorage) {
+        await _saveIncrementalProject();
+      } else {
+        await saveLocalProject(
+          widget.projectId,
+          widget.projectName,
+          projectBytes,
+          thumbnailBase64: _projectThumbnailBase64,
+        );
+      }
       await saveLocalProjectEdits(
         widget.projectId,
         widget.projectName,
@@ -1268,10 +1406,12 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         thumbnailBase64: _projectThumbnailBase64,
       );
       if (!mounted) return;
-      setState(() {
-        _dirty = false;
-        _structureDirty = false;
-      });
+      if (savingRevision == _editRevision) {
+        setState(() {
+          _dirty = false;
+          _structureDirty = false;
+        });
+      }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(_quickFeedback('工程已保存：$path'));
@@ -1308,16 +1448,22 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       );
       if (discard != true) return;
     }
+    ProjectData? decodedProject;
     try {
       final file = await openProjectFile();
       if (file == null) return;
       setState(() => _processing = true);
-      final project = await decodeProject(file.bytes);
+      final project = decodedProject = await decodeProject(file.bytes);
       final thumbnail = project.pages.isEmpty
           ? null
           : await encodeThumbnailBase64(project.pages.first.image);
       _ensureBubbleIds(project.pages);
-      if (!mounted) return;
+      if (!mounted) {
+        _disposePages(project.pages);
+        decodedProject = null;
+        return;
+      }
+      final replacedPages = List<ImagePage>.of(_pages);
       setState(() {
         _pages
           ..clear()
@@ -1328,19 +1474,22 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         _selectedBubble = 0;
         _selectionVisible =
             _pages.isNotEmpty && _pages.first.placements.isNotEmpty;
-        _dirty = true;
+        _markDirty();
         _structureDirty = true;
         _isDemoProject = false;
         _processing = false;
         _undoStack.clear();
         _redoStack.clear();
       });
+      _disposePages(replacedPages);
+      decodedProject = null;
       await _persistLocalProject(forceFull: true);
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(_quickFeedback('已打开工程：${file.name}'));
     } catch (error) {
+      if (decodedProject != null) _disposePages(decodedProject.pages);
       if (!mounted) return;
       setState(() => _processing = false);
       showDialog<void>(
@@ -1417,7 +1566,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       );
       if (appliedScript == null || !mounted) return;
       _script.text = appliedScript;
-      setState(() => _dirty = true);
+      setState(_markDirty);
       _autoArrange();
     } finally {
       draft.dispose();
@@ -2525,7 +2674,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                             _hoverMode = interaction.$2;
                             _inspectorVisible = true;
                           });
-                          _remember();
+                          _remember(currentPageOnly: true);
                         },
                         onPanUpdate: (details) {
                           final b = _bubble;
@@ -2590,7 +2739,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                             case _DragMode.left:
                               left = (left + dx).clamp(0, right - minWidth);
                           }
-                          _replaceBubble(
+                          _replaceBubbleDuringDrag(
                             b.copyWith(
                               x: left,
                               y: top,
@@ -2608,15 +2757,18 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                             border: Border.all(color: AppColors.ink, width: 2),
                             color: Colors.white,
                           ),
-                          child: CustomPaint(
-                            painter: PagePainter(
-                              page: page,
-                              showBubbles: _showRendered,
-                              selectedIndex: !_showRendered ||
-                                      !_selectionVisible ||
-                                      page.placements.isEmpty
-                                  ? null
-                                  : _selectedBubble,
+                          child: RepaintBoundary(
+                            child: CustomPaint(
+                              painter: PagePainter(
+                                page: page,
+                                showBubbles: _showRendered,
+                                repaint: _canvasRevision,
+                                selectedIndex: !_showRendered ||
+                                        !_selectionVisible ||
+                                        page.placements.isEmpty
+                                    ? null
+                                    : _selectedBubble,
+                              ),
                             ),
                           ),
                         ),
@@ -3139,7 +3291,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 value: value.clamp(min, max),
                 min: min,
                 max: max,
-                onChangeStart: (_) => _remember(),
+                onChangeStart: (_) => _remember(currentPageOnly: true),
                 onChanged: onChanged,
               ),
             ),

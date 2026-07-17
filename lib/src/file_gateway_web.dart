@@ -29,7 +29,7 @@ Future<String?> saveBinaryFile({
   final request = <String, Object>{
     'title': title,
     'fileName': fileName,
-    'base64': base64Encode(bytes),
+    'bytes': bytes.toJS,
     'kind': kind,
   }.jsify()!;
   final promise = bridge.callMethod<JSPromise<JSAny?>>(
@@ -59,8 +59,51 @@ Future<OpenedBinaryFile?> openProjectFile() async {
   return OpenedBinaryFile(
     name: (object['name'] as JSString).toDart,
     path: (object['path'] as JSString?)?.toDart,
-    bytes: base64Decode((object['base64'] as JSString).toDart),
+    bytes: object.has('bytes')
+        ? (object['bytes'] as JSUint8Array).toDart
+        : base64Decode((object['base64'] as JSString).toDart),
   );
+}
+
+Future<List<OpenedBinaryFile>?> pickImageFiles() async {
+  final bridge = _desktopBridge;
+  if (bridge == null) {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: true,
+      withData: true,
+    );
+    if (result == null) return null;
+    return [
+      for (final file in result.files)
+        if (file.bytes != null)
+          OpenedBinaryFile(name: file.name, bytes: file.bytes!),
+    ];
+  }
+  final pickPromise =
+      bridge.callMethod<JSPromise<JSAny?>>('pickImagePaths'.toJS);
+  final picked = await pickPromise.toDart;
+  if (picked == null) return null;
+  final entries = jsonDecode((picked as JSString).toDart) as List<dynamic>;
+  final files = <OpenedBinaryFile>[];
+  for (final entry in entries.whereType<Map<String, dynamic>>()) {
+    final filePath = entry['path']?.toString();
+    if (filePath == null) continue;
+    final request = <String, Object>{'path': filePath}.jsify()!;
+    final readPromise = bridge.callMethod<JSPromise<JSAny?>>(
+      'readImageFile'.toJS,
+      request,
+    );
+    final value = await readPromise.toDart;
+    files.add(
+      OpenedBinaryFile(
+        name: entry['name']?.toString() ?? filePath,
+        path: filePath,
+        bytes: (value as JSUint8Array).toDart,
+      ),
+    );
+  }
+  return files;
 }
 
 Future<String?> chooseImageExportDirectory({String? initialDirectory}) async {
@@ -111,7 +154,7 @@ Future<void> writeExportImage(
   final request = <String, Object>{
     'directory': directory,
     'fileName': fileName,
-    'base64': base64Encode(bytes),
+    'bytes': bytes.toJS,
     'overwrite': overwrite,
   }.jsify()!;
   final promise = bridge.callMethod<JSPromise<JSAny?>>(
