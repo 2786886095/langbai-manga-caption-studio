@@ -7,6 +7,7 @@ import 'app_theme.dart';
 import 'app_settings.dart';
 import 'project_store.dart';
 import 'settings_dialog.dart';
+import 'text_context_menu.dart';
 import 'workspace_screen.dart';
 import 'update_service.dart';
 
@@ -173,6 +174,7 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
                 controller: controller,
                 autofocus: true,
                 maxLength: 60,
+                contextMenuBuilder: buildAppTextContextMenu,
                 decoration: const InputDecoration(
                   labelText: '项目名称（可选）',
                   hintText: '例如：第 01 话 初遇',
@@ -252,14 +254,42 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
     final encoded = project.thumbnailBase64;
     if (encoded != null && encoded.isNotEmpty) {
       try {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Image.memory(
-            base64Decode(encoded),
-            width: 72,
-            height: 72,
-            fit: BoxFit.cover,
-            gaplessPlayback: true,
+        return Semantics(
+          label: '项目第一张图片：${project.name}',
+          image: true,
+          child: Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.memory(
+                  base64Decode(encoded),
+                  width: 96,
+                  height: 96,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                ),
+              ),
+              Positioned(
+                left: 6,
+                bottom: 6,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(.72),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: const Text(
+                    '首图',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       } catch (_) {
@@ -267,13 +297,20 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
       }
     }
     return Container(
-      width: 72,
-      height: 72,
+      width: 96,
+      height: 96,
       decoration: BoxDecoration(
         color: AppColors.blush,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: const Icon(Icons.auto_stories_outlined, color: AppColors.pink),
+      child: const Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.auto_stories_outlined, color: AppColors.pink),
+          SizedBox(height: 5),
+          Text('暂无首图', style: TextStyle(color: AppColors.muted, fontSize: 10)),
+        ],
+      ),
     );
   }
 
@@ -283,6 +320,7 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
         body: SafeArea(
           child: Column(
             children: [
+              _updateBanner(),
               Container(
                 height: 92,
                 padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -340,7 +378,6 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
                   ],
                 ),
               ),
-              _updateBanner(),
               Expanded(
                 child: _loading
                     ? const Center(child: CircularProgressIndicator())
@@ -406,7 +443,7 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
             padding: const EdgeInsets.all(24),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: columns,
-              mainAxisExtent: 188,
+              mainAxisExtent: 216,
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
             ),

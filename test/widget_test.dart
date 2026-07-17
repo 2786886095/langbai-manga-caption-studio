@@ -12,6 +12,8 @@ import 'package:bubble_caption_studio/src/models.dart';
 import 'package:bubble_caption_studio/src/page_collection.dart';
 import 'package:bubble_caption_studio/src/project_codec.dart';
 import 'package:bubble_caption_studio/src/script_parser.dart';
+import 'package:bubble_caption_studio/src/text_context_menu.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -23,6 +25,43 @@ void main() {
     final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(app.title, '浪白漫画字幕工坊');
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('editable text exposes the Chinese right-click menu', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '测试字幕');
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 320,
+              child: TextField(
+                controller: controller,
+                contextMenuBuilder: buildAppTextContextMenu,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final location = tester.getCenter(find.byType(TextField));
+    final gesture = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await gesture.addPointer(location: location);
+    await gesture.down(location);
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.text('剪切'), findsOneWidget);
+    expect(find.text('复制'), findsOneWidget);
+    expect(find.text('粘贴'), findsOneWidget);
+    expect(find.text('全选'), findsOneWidget);
   });
 
   test('settings preserve export and autosave preferences', () {

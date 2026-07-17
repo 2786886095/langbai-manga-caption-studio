@@ -112,8 +112,6 @@ BCS 顺序字幕脚本 v2 会记录原图尺寸、气泡 ID、矩形坐标、气
 
 Windows Setup 检测到新版后，会在项目页顶部显示醒目的更新提示，并支持软件内下载安装。其他平台检测到新版后会打开 GitHub Releases。
 
-当前版本：**v0.9.1**
-
 ## 常用快捷键
 
 | 快捷键 | 操作 |
@@ -123,6 +121,7 @@ Windows Setup 检测到新版后，会在项目页顶部显示醒目的更新提
 | `Ctrl + Z` / `Ctrl + Y` | 撤销 / 重做 |
 | `Ctrl + D` | 复制当前气泡 |
 | `Delete` | 删除当前气泡 |
+| 鼠标右键 / 移动端长按 | 剪切、复制、粘贴、全选文字 |
 
 <details>
 <summary><strong>本地开发与 Windows 构建</strong></summary>

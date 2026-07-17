@@ -18,6 +18,7 @@ import 'project_codec.dart';
 import 'project_store.dart';
 import 'script_parser.dart';
 import 'settings_dialog.dart';
+import 'text_context_menu.dart';
 
 class _PageEditState {
   _PageEditState({
@@ -1129,6 +1130,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               expands: true,
               maxLines: null,
               minLines: null,
+              contextMenuBuilder: buildAppTextContextMenu,
               style: const TextStyle(fontFamily: 'monospace', height: 1.5),
             ),
           ),
@@ -1247,6 +1249,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                   fontSize: 14,
                   height: 1.55,
                 ),
+                contextMenuBuilder: buildAppTextContextMenu,
               ),
             ),
           ),
@@ -1301,6 +1304,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 SelectableText(
                   prompt,
                   style: const TextStyle(fontFamily: 'monospace', height: 1.5),
+                  contextMenuBuilder: buildAppTextContextMenu,
                 ),
               ],
             ),
@@ -2500,6 +2504,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               minLines: compact ? 1 : 3,
               maxLines: compact ? 2 : 5,
               maxLength: 200,
+              contextMenuBuilder: buildAppTextContextMenu,
               onTap: _remember,
               onChanged: (value) => _replaceBubble(
                 bubble.copyWith(caption: bubble.caption.copyWith(text: value)),
