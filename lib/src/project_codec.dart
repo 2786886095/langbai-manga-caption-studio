@@ -73,6 +73,7 @@ Map<String, Object?> _encodePlacement(BubblePlacement bubble) => {
       'fontSize': bubble.fontSize,
       'lineHeight': bubble.lineHeight,
       'strokeWidth': bubble.strokeWidth,
+      'fillOpacity': bubble.fillOpacity,
       'fontFamily': bubble.fontFamily,
       'fontColorValue': bubble.fontColorValue,
     };
@@ -153,6 +154,7 @@ BubblePlacement _decodePlacement(
       fontSize: _number(item, 'fontSize', 34),
       lineHeight: _number(item, 'lineHeight', 1.25),
       strokeWidth: _number(item, 'strokeWidth', 3),
+      fillOpacity: _number(item, 'fillOpacity', 1).clamp(0, 1),
       fontFamily: item['fontFamily']?.toString() ?? 'Microsoft YaHei',
       fontColorValue: (item['fontColorValue'] as num?)?.toInt() ?? 0xff141518,
     );
@@ -236,6 +238,7 @@ Future<ProjectData> decodeProject(Uint8List bytes) async {
           fontSize: _number(item, 'fontSize', 34),
           lineHeight: _number(item, 'lineHeight', 1.25),
           strokeWidth: _number(item, 'strokeWidth', 3),
+          fillOpacity: _number(item, 'fillOpacity', 1).clamp(0, 1),
           fontFamily: item['fontFamily']?.toString() ?? 'Microsoft YaHei',
           fontColorValue:
               (item['fontColorValue'] as num?)?.toInt() ?? 0xff141518,

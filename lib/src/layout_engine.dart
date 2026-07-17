@@ -78,6 +78,7 @@ class LayoutEngine {
           fontSize: spec?.fontSize ?? 34,
           lineHeight: spec?.lineHeight ?? 1.25,
           strokeWidth: spec?.strokeWidth ?? 3,
+          fillOpacity: spec?.fillOpacity ?? 1,
         ),
       );
     }

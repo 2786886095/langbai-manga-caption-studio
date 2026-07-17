@@ -160,6 +160,7 @@ ScriptParseResult parseCaptionScript(String source) {
         '颜色',
         '行距',
         '描边',
+        '白底透明度',
       };
       if (!bubbleDirectiveKeys.contains(key)) {
         warnings.add('第 $lineNumber 行：未知指令 @$key，请检查拼写。');
@@ -310,6 +311,14 @@ CaptionLayoutSpec _buildLayoutSpec(
   if (values.containsKey('尾巴位置')) {
     warnings.add('第 $line 行：@尾巴位置 已停用；尾部固定在气泡边缘，只需设置四向 @尾巴。');
   }
+  final fillOpacityPercent = _parseNumber(
+    values['白底透明度'],
+    '白底透明度',
+    line,
+    warnings,
+    0,
+    100,
+  );
   return CaptionLayoutSpec(
     x: rect?.$1,
     y: rect?.$2,
@@ -328,6 +337,7 @@ CaptionLayoutSpec _buildLayoutSpec(
     fontSize: _parseNumber(values['字号'], '字号', line, warnings, 8, 200),
     lineHeight: _parseNumber(values['行距'], '行距', line, warnings, .8, 3),
     strokeWidth: _parseNumber(values['描边'], '描边', line, warnings, 0, 20),
+    fillOpacity: fillOpacityPercent == null ? null : fillOpacityPercent / 100,
   );
 }
 

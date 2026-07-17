@@ -56,7 +56,10 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
       });
     } else if (manual && info.state == 'upToDate') {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('当前已经是最新版本 ${info.currentVersion}')),
+        SnackBar(
+          content: Text('当前已经是最新版本 ${info.currentVersion}'),
+          duration: const Duration(milliseconds: 1200),
+        ),
       );
     }
   }

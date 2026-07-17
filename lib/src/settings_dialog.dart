@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'app_settings.dart';
+import 'update_service.dart';
 
 Future<AppSettings?> showAppSettingsDialog(
   BuildContext context,
@@ -116,6 +120,8 @@ Future<AppSettings?> showAppSettingsDialog(
                       ),
                     ],
                   ),
+                const Divider(height: 28),
+                const _UpdateSettingsSection(),
               ],
             ),
           ),
@@ -136,4 +142,132 @@ Future<AppSettings?> showAppSettingsDialog(
       ),
     ),
   );
+}
+
+class _UpdateSettingsSection extends StatefulWidget {
+  const _UpdateSettingsSection();
+
+  @override
+  State<_UpdateSettingsSection> createState() => _UpdateSettingsSectionState();
+}
+
+class _UpdateSettingsSectionState extends State<_UpdateSettingsSection> {
+  Timer? _pollTimer;
+  AppUpdateInfo? _info;
+  String _currentVersion = '读取中';
+  bool _checking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStatus();
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadStatus() async {
+    final package = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+    setState(() => _currentVersion = package.version);
+    final info = await getAppUpdateStatus();
+    if (!mounted) return;
+    _updateInfo(info);
+  }
+
+  Future<void> _checkForUpdates() async {
+    setState(() => _checking = true);
+    final info = await checkForAppUpdate();
+    if (!mounted) return;
+    setState(() => _checking = false);
+    _updateInfo(info);
+  }
+
+  void _updateInfo(AppUpdateInfo info) {
+    setState(() => _info = info);
+    if (!const {'checking', 'available', 'downloading'}.contains(info.state)) {
+      _pollTimer?.cancel();
+      return;
+    }
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      final next = await getAppUpdateStatus();
+      if (!mounted) return;
+      setState(() => _info = next);
+      if (!const {'checking', 'available', 'downloading'}
+          .contains(next.state)) {
+        _pollTimer?.cancel();
+      }
+    });
+  }
+
+  String get _statusText {
+    final info = _info;
+    if (_checking || info?.state == 'checking') return '正在检测更新…';
+    if (info == null) return '正在读取更新状态…';
+    return switch (info.state) {
+      'available' => '发现 ${info.latestVersion}，正在准备下载…',
+      'downloading' =>
+        '正在下载 ${info.latestVersion} · ${info.progress.clamp(0, 100).round()}%',
+      'downloaded' => '${info.latestVersion} 已下载，可以立即安装',
+      'external' => '发现 ${info.latestVersion}，当前平台需前往 GitHub 更新',
+      'upToDate' => '当前已经是最新版本',
+      'error' => info.message.isEmpty ? '检测更新失败，请稍后重试' : info.message,
+      _ => '尚未检测更新',
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final info = _info;
+    final canInstall = info?.state == 'downloaded';
+    final openGitHub = info?.state == 'external';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '软件与更新',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 8),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.system_update_alt),
+          title: Text('浪白漫画字幕工坊 $_currentVersion'),
+          subtitle: Text(_statusText),
+          trailing: FilledButton.icon(
+            onPressed: _checking
+                ? null
+                : canInstall || openGitHub
+                    ? () => installOrOpenAppUpdate(info!)
+                    : _checkForUpdates,
+            icon: Icon(
+              canInstall
+                  ? Icons.restart_alt
+                  : openGitHub
+                      ? Icons.open_in_new
+                      : Icons.refresh,
+              size: 18,
+            ),
+            label: Text(
+              canInstall
+                  ? '安装并重启'
+                  : openGitHub
+                      ? '前往 GitHub'
+                      : _checking
+                          ? '检测中'
+                          : '检测更新',
+            ),
+          ),
+        ),
+        const Text(
+          'Windows Setup 版可在软件内下载并安装；Portable 和其他平台会打开 GitHub Releases。',
+          style: TextStyle(color: Colors.black54, fontSize: 12),
+        ),
+      ],
+    );
+  }
 }

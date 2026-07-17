@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -91,6 +92,22 @@ enum _DragMode {
   bottomLeft,
   left,
 }
+
+enum _BubbleStyleProperty {
+  fontFamily,
+  fontColor,
+  fontSize,
+  lineHeight,
+  strokeWidth,
+  shape,
+  tailDirection,
+  fillOpacity,
+}
+
+SnackBar _quickFeedback(String message) => SnackBar(
+      content: Text(message),
+      duration: const Duration(milliseconds: 1200),
+    );
 
 enum _ExistingImageChoice { overwrite, overwriteAll, skip, cancel }
 
@@ -402,6 +419,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           )
           ..writeln('@行距=${bubble.lineHeight.toStringAsFixed(2)}')
           ..writeln('@描边=${bubble.strokeWidth.toStringAsFixed(1)}')
+          ..writeln('@白底透明度=${(bubble.fillOpacity * 100).round()}')
           ..writeln(caption.text)
           ..writeln();
       }
@@ -649,10 +667,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       (total, page) => total + page.placements.length,
     );
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '字幕已应用并完成排版：${_pages.length} 张图片，共 $bubbleCount 个气泡。脚本中的矩形坐标和样式已生效。',
-        ),
+      _quickFeedback(
+        '字幕已应用并完成排版：${_pages.length} 张图片，共 $bubbleCount 个气泡。脚本中的矩形坐标和样式已生效。',
       ),
     );
     if (mounted && (parsed.warnings.isNotEmpty || migratedLegacy)) {
@@ -695,7 +711,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     });
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('仅重置了当前图片的气泡排版')));
+    ).showSnackBar(_quickFeedback('仅重置了当前图片的气泡排版'));
   }
 
   Future<void> _runLayoutStep() async {
@@ -744,9 +760,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       _dirty = true;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-            '排版完成：${pagesWithCaptions.length} 张图片，共 $bubbleCount 个气泡。可继续手动微调。'),
+      _quickFeedback(
+        '排版完成：${pagesWithCaptions.length} 张图片，共 $bubbleCount 个气泡。可继续手动微调。',
       ),
     );
   }
@@ -801,6 +816,125 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       page.approved = false;
       _dirty = true;
     });
+  }
+
+  Future<void> _applySelectedStyleToAll(BubblePlacement source) async {
+    final selected = <_BubbleStyleProperty>{};
+    final labels = <_BubbleStyleProperty, String>{
+      _BubbleStyleProperty.fontFamily: '字体',
+      _BubbleStyleProperty.fontColor: '字体颜色',
+      _BubbleStyleProperty.fontSize: '字体大小',
+      _BubbleStyleProperty.lineHeight: '行间距',
+      _BubbleStyleProperty.strokeWidth: '描边粗细',
+      _BubbleStyleProperty.shape: '气泡样式',
+      _BubbleStyleProperty.tailDirection: '尾部方向',
+      _BubbleStyleProperty.fillOpacity: '白底透明度',
+    };
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('选择应用到全部气泡的属性'),
+          content: SizedBox(
+            width: 430,
+            height: math.min(470, MediaQuery.sizeOf(context).height * .65),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () => setDialogState(
+                        () => selected.addAll(_BubbleStyleProperty.values),
+                      ),
+                      child: const Text('全选'),
+                    ),
+                    TextButton(
+                      onPressed: () => setDialogState(selected.clear),
+                      child: const Text('清空'),
+                    ),
+                    const Spacer(),
+                    Text('已选 ${selected.length} 项'),
+                  ],
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      for (final property in _BubbleStyleProperty.values)
+                        CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          value: selected.contains(property),
+                          title: Text(labels[property]!),
+                          onChanged: (checked) => setDialogState(() {
+                            if (checked == true) {
+                              selected.add(property);
+                            } else {
+                              selected.remove(property);
+                            }
+                          }),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: selected.isEmpty
+                  ? null
+                  : () => Navigator.pop(dialogContext, true),
+              child: const Text('应用'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    _remember();
+    var changed = 0;
+    for (final page in _pages) {
+      for (var i = 0; i < page.placements.length; i++) {
+        final target = page.placements[i];
+        page.placements[i] = target.copyWith(
+          fontFamily: selected.contains(_BubbleStyleProperty.fontFamily)
+              ? source.fontFamily
+              : null,
+          fontColorValue: selected.contains(_BubbleStyleProperty.fontColor)
+              ? source.fontColorValue
+              : null,
+          fontSize: selected.contains(_BubbleStyleProperty.fontSize)
+              ? source.fontSize
+              : null,
+          lineHeight: selected.contains(_BubbleStyleProperty.lineHeight)
+              ? source.lineHeight
+              : null,
+          strokeWidth: selected.contains(_BubbleStyleProperty.strokeWidth)
+              ? source.strokeWidth
+              : null,
+          shape: selected.contains(_BubbleStyleProperty.shape)
+              ? source.shape
+              : null,
+          tailDirection: selected.contains(_BubbleStyleProperty.tailDirection)
+              ? source.tailDirection
+              : null,
+          fillOpacity: selected.contains(_BubbleStyleProperty.fillOpacity)
+              ? source.fillOpacity
+              : null,
+        );
+        page.approved = false;
+        changed++;
+      }
+    }
+    setState(() => _dirty = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      _quickFeedback('已将 ${selected.length} 项属性应用到 $changed 个气泡'),
+    );
   }
 
   void _addBubble() {
@@ -909,6 +1043,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 
   Future<void> _exportAll() async {
     if (_pages.isEmpty || _exporting) return;
+    final selectedIndexes = await _chooseExportPages();
+    if (selectedIndexes == null || selectedIndexes.isEmpty || !mounted) return;
     final directory = await chooseImageExportDirectory(
       initialDirectory:
           _settings.exportDirectory.isEmpty ? null : _settings.exportDirectory,
@@ -919,7 +1055,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       var exported = 0;
       var skipped = 0;
       var overwriteAll = false;
-      for (var index = 0; index < _pages.length; index++) {
+      for (final index in selectedIndexes) {
         final fileName = exportImageName(
           _pages[index],
           index,
@@ -953,9 +1089,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  '导出完成：已直接写入 $exported 张 PNG${skipped == 0 ? '' : '，跳过 $skipped 张'}\n$directory')),
+          _quickFeedback(
+            '导出完成：已直接写入 $exported 张 PNG${skipped == 0 ? '' : '，跳过 $skipped 张'}\n$directory',
+          ),
         );
       }
     } catch (error) {
@@ -967,6 +1103,103 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
+  }
+
+  Future<List<int>?> _chooseExportPages() async {
+    final selected = <int>{for (var i = 0; i < _pages.length; i++) i};
+    return showDialog<List<int>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('选择要导出的图片'),
+          content: SizedBox(
+            width: 560,
+            height: math.min(520, MediaQuery.sizeOf(context).height * .68),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () => setDialogState(() {
+                        selected
+                          ..clear()
+                          ..addAll(List.generate(_pages.length, (i) => i));
+                      }),
+                      child: const Text('全选'),
+                    ),
+                    TextButton(
+                      onPressed: () => setDialogState(selected.clear),
+                      child: const Text('清空'),
+                    ),
+                    TextButton(
+                      onPressed: () => setDialogState(() {
+                        selected
+                          ..clear()
+                          ..add(_selectedPage);
+                      }),
+                      child: const Text('仅当前图片'),
+                    ),
+                    const Spacer(),
+                    Text('已选 ${selected.length} / ${_pages.length}'),
+                  ],
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: _pages.length,
+                    itemBuilder: (context, index) {
+                      final page = _pages[index];
+                      return CheckboxListTile(
+                        value: selected.contains(index),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        secondary: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: RawImage(
+                              image: page.image,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        title: Text('${index + 1}. ${page.name}'),
+                        subtitle: Text(
+                          '${page.originalWidth} × ${page.originalHeight} · ${page.placements.length} 个气泡',
+                        ),
+                        onChanged: (checked) => setDialogState(() {
+                          if (checked == true) {
+                            selected.add(index);
+                          } else {
+                            selected.remove(index);
+                          }
+                        }),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+            FilledButton.icon(
+              onPressed: selected.isEmpty
+                  ? null
+                  : () => Navigator.pop(
+                        dialogContext,
+                        selected.toList()..sort(),
+                      ),
+              icon: const Icon(Icons.folder_open_outlined),
+              label: Text('选择目录并导出 ${selected.length} 张'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<_ExistingImageChoice> _askExistingImage(String fileName) async {
@@ -1041,7 +1274,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       });
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('工程已保存：$path')));
+      ).showSnackBar(_quickFeedback('工程已保存：$path'));
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -1106,7 +1339,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('已打开工程：${file.name}')));
+      ).showSnackBar(_quickFeedback('已打开工程：${file.name}'));
     } catch (error) {
       if (!mounted) return;
       setState(() => _processing = false);
@@ -1166,6 +1399,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               icon: const Icon(Icons.auto_awesome_outlined),
               label: const Text('AI 生成指南'),
             ),
+            TextButton.icon(
+              onPressed: () => _showScriptMatchPreview(draft.text),
+              icon: const Icon(Icons.fact_check_outlined),
+              label: const Text('检查匹配'),
+            ),
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('取消'),
@@ -1184,6 +1422,56 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     } finally {
       draft.dispose();
     }
+  }
+
+  Future<void> _showScriptMatchPreview(String source) async {
+    final parsed = parseCaptionScript(source);
+    final blocking = validateScriptForPages(parsed, _pages);
+    final lines = <String>[];
+    if (blocking.isEmpty) {
+      for (var index = 0;
+          index < _pages.length && index < parsed.sections.length;
+          index++) {
+        lines.add(
+          '图片 ${index + 1} → ${_pages[index].name}：'
+          '${parsed.sections[index].captions.length} 个气泡',
+        );
+      }
+      if (lines.length > 12) {
+        final hidden = lines.length - 12;
+        lines
+          ..removeRange(12, lines.length)
+          ..add('另有 $hidden 张图片，匹配规则相同。');
+      }
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(blocking.isEmpty ? '字幕匹配检查通过' : '字幕匹配检查未通过'),
+        content: SizedBox(
+          width: 560,
+          child: SingleChildScrollView(
+            child: Text(
+              blocking.isEmpty
+                  ? [
+                      '脚本按 [图片 1]、[图片 2] 的出现顺序对应项目图片，不按文件名匹配。',
+                      '',
+                      ...lines,
+                      if (parsed.warnings.isNotEmpty) '',
+                      ...parsed.warnings.take(5),
+                    ].join('\n')
+                  : blocking.take(10).join('\n\n'),
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _importScriptFile(TextEditingController target) async {
@@ -1220,7 +1508,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       if (mounted && path != null) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('字幕模板已保存：$path')));
+        ).showSnackBar(_quickFeedback('字幕模板已保存：$path'));
       }
     } catch (error) {
       if (mounted) {
@@ -1242,7 +1530,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               child: SelectableText(
                 '@格式=BCS顺序字幕脚本\n@版本=2\n@坐标单位=px\n\n'
                 '[图片 1]\n@原文件名=示例.png\n@原图尺寸=1080x1920\n\n'
-                '@气泡ID=p1-b1\n@矩形=80,100,520,260\n@尾巴=右下\n@气泡=对话气泡\n@字体=Microsoft YaHei\n@字号=34\n@颜色=#141518\n@行距=1.25\n@描边=2\n这里替换对话\n\n'
+                '@气泡ID=p1-b1\n@矩形=80,100,520,260\n@尾巴=右下\n@气泡=对话气泡\n@字体=Microsoft YaHei\n@字号=34\n@颜色=#141518\n@行距=1.25\n@描边=2\n@白底透明度=100\n这里替换对话\n\n'
                 '说明：\n'
                 '• [图片 1]、[图片 2] 严格对应确认后的第 1、2 张图片；文件名只作提示。\n'
                 '• 每张必须填写 @原图尺寸=宽x高，应用时会与实际图片严格校验。\n'
@@ -1252,6 +1540,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 '• 尾部固定在气泡边缘，不可拖动；只需选择左上、右上、左下或右下。\n'
                 '• 气泡可用对话气泡、心理气泡、旁白框、耳语气泡、惊喊气泡。心理气泡为云朵主体和连续圆点尾；耳语气泡使用虚线轮廓；旁白框不显示尾巴。\n'
                 '• 模板固定使用白色或浅灰填充、黑色细描边；@颜色 只改变内部字体颜色。\n'
+                '• @白底透明度 使用 0–100；100 为完全不透明，0 为完全透明，描边和文字不受影响。\n'
                 '• 每个气泡块之间必须留一个空行。\n'
                 '• 旧版 [文件名] 脚本可导入，软件会按段落出现顺序迁移，绝不会再按文件名匹配。',
                 style: TextStyle(
@@ -1330,7 +1619,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               await Clipboard.setData(ClipboardData(text: prompt));
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('完整规范、图片顺序、原图尺寸和当前模板已复制')),
+                  _quickFeedback('完整规范、图片顺序、原图尺寸和当前模板已复制'),
                 );
               }
             },
@@ -2685,6 +2974,16 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               8,
               (value) => _replaceBubble(bubble.copyWith(strokeWidth: value)),
             ),
+            _sliderRow(
+              '白底透明度',
+              bubble.fillOpacity * 100,
+              0,
+              100,
+              (value) => _replaceBubble(
+                bubble.copyWith(fillOpacity: value / 100),
+              ),
+              percent: true,
+            ),
             if (bubbleHasPointer(bubble.shape)) ...[
               const SizedBox(height: 8),
               const Text(
@@ -2735,28 +3034,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () {
-                  _remember();
-                  for (final p in _pages) {
-                    for (var i = 0; i < p.placements.length; i++) {
-                      p.placements[i] = p.placements[i].copyWith(
-                        fontSize: bubble.fontSize,
-                        lineHeight: bubble.lineHeight,
-                        strokeWidth: bubble.strokeWidth,
-                        shape: bubble.shape,
-                        fontFamily: bubble.fontFamily,
-                        fontColorValue: bubble.fontColorValue,
-                        tailDirection: bubble.tailDirection,
-                      );
-                    }
-                  }
-                  setState(() => _dirty = true);
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('样式已应用到全部气泡')));
-                },
+                onPressed: () => _applySelectedStyleToAll(bubble),
                 icon: const Icon(Icons.copy_all_outlined),
-                label: const Text('应用样式到全部气泡'),
+                label: const Text('选择属性并应用到全部'),
               ),
             ),
             if (!compact) ...[
@@ -2839,8 +3119,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     double value,
     double min,
     double max,
-    ValueChanged<double> onChanged,
-  ) =>
+    ValueChanged<double> onChanged, {
+    bool percent = false,
+  }) =>
       Padding(
         padding: const EdgeInsets.only(bottom: 7),
         child: Row(
@@ -2865,8 +3146,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
             SizedBox(
               width: 42,
               child: Text(
-                label == '尾巴位置'
-                    ? '${(value * 100).round()}%'
+                percent
+                    ? '${value.round()}%'
                     : value.toStringAsFixed(label == '行间距' ? 1 : 0),
                 textAlign: TextAlign.right,
                 style:

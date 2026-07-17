@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 env:
-  APP_VERSION: 0.9.3
+  APP_VERSION: 0.9.4
 
 jobs:
   validate:

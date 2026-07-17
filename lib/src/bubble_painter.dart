@@ -110,6 +110,7 @@ class PagePainter extends CustomPainter {
             bubble.fontSize,
             bubble.lineHeight,
             bubble.strokeWidth,
+            bubble.fillOpacity,
             bubble.fontFamily,
             bubble.fontColorValue,
           ],
@@ -159,10 +160,11 @@ class PagePainter extends CustomPainter {
     double sy,
     bool selected,
   ) {
+    final fillColor = bubble.shape == BubbleShape.rounded
+        ? const Color(0xfff5f5f3)
+        : Colors.white;
     final fill = Paint()
-      ..color = bubble.shape == BubbleShape.rounded
-          ? const Color(0xfff5f5f3)
-          : Colors.white;
+      ..color = fillColor.withOpacity(bubble.fillOpacity.clamp(0, 1));
     final stroke = Paint()
       ..color = const Color(0xff17181b)
       ..style = PaintingStyle.stroke

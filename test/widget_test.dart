@@ -163,6 +163,7 @@ void main() {
 @颜色=#D52F4F
 @行距=1.4
 @描边=4
+@白底透明度=65
 你迟到了！
 ''');
     expect(parsed.warnings, hasLength(1));
@@ -182,6 +183,7 @@ void main() {
     expect(bubble.width, 260);
     expect(bubble.height, 360);
     expect(bubble.fontSize, 40);
+    expect(bubble.fillOpacity, .65);
     expect(bubble.tailDirection, TailDirection.downLeft);
     expect(bubble.tailX, .5);
   });
@@ -212,6 +214,7 @@ void main() {
           tailDirection: TailDirection.downRight,
           tailX: .65,
           fontColorValue: 0xffd52f4f,
+          fillOpacity: .45,
         ),
       ]
       ..approved = true;
@@ -228,6 +231,7 @@ void main() {
     expect(decoded.pages.single.captions.single.text, '测试工程');
     expect(decoded.pages.single.placements.single.shape, BubbleShape.thought);
     expect(decoded.pages.single.placements.single.tailX, .5);
+    expect(decoded.pages.single.placements.single.fillOpacity, .45);
     expect(decoded.pages.single.approved, isTrue);
   });
 

@@ -24,6 +24,7 @@ class CaptionLayoutSpec {
     this.fontSize,
     this.lineHeight,
     this.strokeWidth,
+    this.fillOpacity,
   });
 
   final double? x;
@@ -43,6 +44,7 @@ class CaptionLayoutSpec {
   final double? fontSize;
   final double? lineHeight;
   final double? strokeWidth;
+  final double? fillOpacity;
 
   bool get hasExplicitPosition =>
       (x != null && y != null) ||
@@ -89,6 +91,7 @@ class BubblePlacement {
     this.fontSize = 34,
     this.lineHeight = 1.25,
     this.strokeWidth = 3,
+    this.fillOpacity = 1,
     this.fontFamily = 'Microsoft YaHei',
     this.fontColorValue = 0xff141518,
     this.tailDirection = TailDirection.downRight,
@@ -104,6 +107,7 @@ class BubblePlacement {
   final double fontSize;
   final double lineHeight;
   final double strokeWidth;
+  final double fillOpacity;
   final String fontFamily;
   final int fontColorValue;
   final TailDirection tailDirection;
@@ -120,6 +124,7 @@ class BubblePlacement {
     double? fontSize,
     double? lineHeight,
     double? strokeWidth,
+    double? fillOpacity,
     String? fontFamily,
     int? fontColorValue,
     TailDirection? tailDirection,
@@ -136,6 +141,7 @@ class BubblePlacement {
         fontSize: fontSize ?? this.fontSize,
         lineHeight: lineHeight ?? this.lineHeight,
         strokeWidth: strokeWidth ?? this.strokeWidth,
+        fillOpacity: fillOpacity ?? this.fillOpacity,
         fontFamily: fontFamily ?? this.fontFamily,
         fontColorValue: fontColorValue ?? this.fontColorValue,
         tailDirection: tailDirection ?? this.tailDirection,
