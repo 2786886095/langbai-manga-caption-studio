@@ -39,7 +39,7 @@ jobs:
           Copy-Item -Path build/web/* -Destination desktop-shell/web -Recurse -Force
       - name: Install desktop dependencies
         working-directory: desktop-shell
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build Setup, portable app, and publish update metadata
         working-directory: desktop-shell
         env:
