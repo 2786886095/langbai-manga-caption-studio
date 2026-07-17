@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -159,6 +160,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   final List<String> _importedFonts = [];
   final Map<String, Uint8List> _fontBytes = {};
   String? _projectThumbnailBase64;
+  ui.Image? _activeSourceImage;
+  String? _activeSourcePageId;
+  String? _loadingSourcePageId;
+  int _sourceLoadGeneration = 0;
 
   ImagePage? get _page =>
       _pages.isEmpty ? null : _pages[_selectedPage.clamp(0, _pages.length - 1)];
@@ -278,6 +283,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   void dispose() {
     _autosaveTimer?.cancel();
     if (_dirty && _pages.isNotEmpty) unawaited(_persistLocalProject());
+    _clearActiveSourceImage();
     _disposePages(_pages);
     _canvasRevision.dispose();
     _script.dispose();
@@ -288,6 +294,55 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     for (final page in pages) {
       page.dispose();
     }
+  }
+
+  void _clearActiveSourceImage() {
+    _sourceLoadGeneration++;
+    _activeSourceImage?.dispose();
+    _activeSourceImage = null;
+    _activeSourcePageId = null;
+    _loadingSourcePageId = null;
+  }
+
+  Future<void> _loadSelectedPageSource() async {
+    final page = _page;
+    if (page == null ||
+        _activeSourcePageId == page.pageId ||
+        _loadingSourcePageId == page.pageId) {
+      return;
+    }
+    final pageId = page.pageId;
+    final generation = ++_sourceLoadGeneration;
+    final previous = _activeSourceImage;
+    if (mounted) {
+      setState(() {
+        _activeSourceImage = null;
+        _activeSourcePageId = null;
+        _loadingSourcePageId = pageId;
+      });
+    }
+    previous?.dispose();
+    ui.Image source;
+    try {
+      source = await decodeOriginalImage(page.bytes);
+    } catch (_) {
+      if (mounted && generation == _sourceLoadGeneration) {
+        setState(() => _loadingSourcePageId = null);
+      }
+      return;
+    }
+    if (!mounted ||
+        generation != _sourceLoadGeneration ||
+        _page?.pageId != pageId) {
+      source.dispose();
+      return;
+    }
+    setState(() {
+      _activeSourceImage = source;
+      _activeSourcePageId = pageId;
+      _loadingSourcePageId = null;
+      _canvasRevision.value++;
+    });
   }
 
   void _markDirty() {
@@ -353,6 +408,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         _editRevision = 0;
         _structureDirty = needsMigration;
       });
+      unawaited(_loadSelectedPageSource());
       await saveLocalProjectEdits(
         widget.projectId,
         widget.projectName,
@@ -577,6 +633,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     final selectedPageId = orderedPages.first.pageId;
     final replacedPages =
         replace ? List<ImagePage>.of(_pages) : const <ImagePage>[];
+    _clearActiveSourceImage();
     setState(() {
       final merged = mergeImagePages(_pages, orderedPages, replace: replace);
       _pages
@@ -595,6 +652,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       _undoStack.clear();
       _redoStack.clear();
     });
+    unawaited(_loadSelectedPageSource());
     _disposePages(replacedPages);
     _script.text = _scriptForPages(_pages);
     _projectThumbnailBase64 = await encodeThumbnailBase64(_pages.first.image);
@@ -889,6 +947,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       _selectionVisible = count > 0;
       _markDirty();
     });
+    unawaited(_loadSelectedPageSource());
   }
 
   void _replaceBubble(BubblePlacement bubble, {bool remember = false}) {
@@ -1128,13 +1187,16 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     });
   }
 
-  void _selectPage(int index) => setState(() {
-        _selectedPage = index;
-        _selectedBubble = 0;
-        _selectionVisible = _pages[index].placements.isNotEmpty;
-        _undoStack.clear();
-        _redoStack.clear();
-      });
+  void _selectPage(int index) {
+    setState(() {
+      _selectedPage = index;
+      _selectedBubble = 0;
+      _selectionVisible = _pages[index].placements.isNotEmpty;
+      _undoStack.clear();
+      _redoStack.clear();
+    });
+    unawaited(_loadSelectedPageSource());
+  }
 
   Future<void> _exportAll() async {
     if (_pages.isEmpty || _exporting) return;
@@ -1464,6 +1526,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         return;
       }
       final replacedPages = List<ImagePage>.of(_pages);
+      _clearActiveSourceImage();
       setState(() {
         _pages
           ..clear()
@@ -1481,6 +1544,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         _undoStack.clear();
         _redoStack.clear();
       });
+      unawaited(_loadSelectedPageSource());
       _disposePages(replacedPages);
       decodedProject = null;
       await _persistLocalProject(forceFull: true);
@@ -2757,19 +2821,67 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                             border: Border.all(color: AppColors.ink, width: 2),
                             color: Colors.white,
                           ),
-                          child: RepaintBoundary(
-                            child: CustomPaint(
-                              painter: PagePainter(
-                                page: page,
-                                showBubbles: _showRendered,
-                                repaint: _canvasRevision,
-                                selectedIndex: !_showRendered ||
-                                        !_selectionVisible ||
-                                        page.placements.isEmpty
-                                    ? null
-                                    : _selectedBubble,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              RepaintBoundary(
+                                child: CustomPaint(
+                                  painter: PagePainter(
+                                    page: page,
+                                    sourceImage:
+                                        _activeSourcePageId == page.pageId
+                                            ? _activeSourceImage
+                                            : null,
+                                    showBubbles: _showRendered,
+                                    repaint: _canvasRevision,
+                                    selectedIndex: !_showRendered ||
+                                            !_selectionVisible ||
+                                            page.placements.isEmpty
+                                        ? null
+                                        : _selectedBubble,
+                                  ),
+                                ),
                               ),
-                            ),
+                              if (_loadingSourcePageId == page.pageId)
+                                Positioned(
+                                  top: 10,
+                                  right: 10,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(.72),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 9,
+                                        vertical: 6,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          SizedBox(
+                                            width: 13,
+                                            height: 13,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          SizedBox(width: 7),
+                                          Text(
+                                            '正在加载高清原图',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       ),
