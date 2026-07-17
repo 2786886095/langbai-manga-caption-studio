@@ -1,7 +1,7 @@
 # 浪白漫画字幕工坊
 
 <p align="center">
-  <img src="assets/浪白漫画字幕工坊-宣传图-v1.png" alt="浪白漫画字幕工坊宣传图" width="100%">
+  <img src="assets/浪白漫画字幕工坊-宣传图-v2.png" alt="浪白漫画字幕工坊全平台宣传图" width="100%">
 </p>
 
 <p align="center">
