@@ -1,0 +1,54 @@
+{
+  "name": "bubble-caption-studio-desktop",
+  "version": "0.9.0",
+  "private": true,
+  "description": "浪白漫画字幕工坊 Windows 本地桌面版",
+  "author": "Langbai",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "dist": "electron-builder --win nsis portable --publish never",
+    "release": "electron-builder --win nsis portable --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "6.6.2"
+  },
+  "devDependencies": {
+    "electron": "31.7.7",
+    "electron-builder": "24.13.3"
+  },
+  "build": {
+    "appId": "com.langbai.bubble-caption-studio",
+    "productName": "浪白漫画字幕工坊",
+    "asar": true,
+    "compression": "maximum",
+    "directories": { "output": "../release-windows-0.9.0" },
+    "files": ["main.js", "preload.js", "package.json", "web/**", "assets/**"],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "2786886095",
+        "repo": "langbai-manga-caption-studio"
+      }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "assets/app-icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "浪白漫画字幕工坊",
+      "artifactName": "Langbai-Manga-Caption-Studio-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Langbai-Manga-Caption-Studio-${version}-Portable.${ext}"
+    }
+  }
+}

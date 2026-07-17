@@ -1,0 +1,45 @@
+name: Build and publish Windows release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  windows-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: stable
+          cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: desktop-shell/pnpm-lock.yaml
+      - name: Test and build Flutter web app
+        shell: pwsh
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+          flutter build web --release
+          (Get-Content build/web/index.html -Raw).Replace('<base href="/">', '<base href="./">') | Set-Content build/web/index.html -NoNewline
+          Copy-Item -Path build/web/* -Destination desktop-shell/web -Recurse -Force
+      - name: Install desktop dependencies
+        working-directory: desktop-shell
+        run: pnpm install --frozen-lockfile
+      - name: Build Setup, portable app, and publish update metadata
+        working-directory: desktop-shell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm exec electron-builder --win nsis portable --publish always
