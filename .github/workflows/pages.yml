@@ -33,7 +33,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build web --release --web-renderer html --no-web-resources-cdn --base-href /langbai-manga-caption-studio/
+      - run: flutter build web --release --no-web-resources-cdn --base-href /langbai-manga-caption-studio/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

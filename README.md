@@ -134,7 +134,7 @@ Windows Setup 检测到新版后，会在项目页顶部显示醒目的更新提
 flutter pub get
 flutter analyze
 flutter test
-flutter build web --release --web-renderer html --no-web-resources-cdn
+flutter build web --release --no-web-resources-cdn
 (Get-Content build/web/index.html -Raw).Replace('<base href="/">', '<base href="./">') | Set-Content build/web/index.html -NoNewline
 Copy-Item -Path build/web/* -Destination desktop-shell/web -Recurse -Force
 cd desktop-shell

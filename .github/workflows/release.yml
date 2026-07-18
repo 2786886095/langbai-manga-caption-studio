@@ -129,7 +129,7 @@ jobs:
       - run: flutter pub get
       - name: Build web archive
         run: |
-          flutter build web --release --web-renderer html --no-web-resources-cdn --base-href /langbai-manga-caption-studio/
+          flutter build web --release --no-web-resources-cdn --base-href /langbai-manga-caption-studio/
           cd build/web
           zip -r "../../Langbai-Manga-Caption-Studio-Web-${{ needs.validate.outputs.app_version }}.zip" .
       - uses: actions/upload-artifact@v4
@@ -156,7 +156,7 @@ jobs:
         shell: pwsh
         run: |
           flutter pub get
-          flutter build web --release --web-renderer html --no-web-resources-cdn
+          flutter build web --release --no-web-resources-cdn
           (Get-Content build/web/index.html -Raw).Replace('<base href="/">', '<base href="./">') | Set-Content build/web/index.html -NoNewline
           New-Item -ItemType Directory -Path desktop-shell/web -Force | Out-Null
           Copy-Item -Path build/web/* -Destination desktop-shell/web -Recurse -Force
