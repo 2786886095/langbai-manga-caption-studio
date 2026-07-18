@@ -1,4 +1,5 @@
 import 'models.dart';
+import 'app_localization.dart';
 
 class ScriptImageSection {
   ScriptImageSection({
@@ -195,7 +196,12 @@ ScriptParseResult parseCaptionScript(String source) {
       warnings.add('第 ${section.number} 张缺少有效的 @原图尺寸。');
     }
   }
-  return ScriptParseResult(byFile, unassigned, warnings, sections);
+  return ScriptParseResult(
+    byFile,
+    unassigned,
+    warnings.map(tr).toList(growable: false),
+    sections,
+  );
 }
 
 List<String> validateScriptForPages(
@@ -246,7 +252,7 @@ List<String> validateScriptForPages(
       }
     }
   }
-  return errors;
+  return errors.map(tr).toList(growable: false);
 }
 
 CaptionLayoutSpec _buildLayoutSpec(

@@ -19,6 +19,10 @@
   <a href="字幕导入格式规范.md">字幕格式规范</a>
 </p>
 
+界面与 AI 脚本指南均支持简体中文、繁體中文、English、日本語和한국어；BCS 字段名保持固定，五种语言生成的脚本可以在任意界面语言下互相导入。
+
+AI 指南：[简体中文](AI字幕脚本生成指南.md) · [繁體中文](guides/ai_guide_zh_TW.md) · [English](guides/ai_guide_en.md) · [日本語](guides/ai_guide_ja.md) · [한국어](guides/ai_guide_ko.md)
+
 ## 软件能做什么
 
 浪白漫画字幕工坊可以按照确认后的图片顺序，批量导入字幕脚本、自动生成气泡排版，再逐张进行精确微调。图片、字体、项目和最终渲染全部保留在当前设备，不需要上传原图。
@@ -130,7 +134,7 @@ Windows Setup 检测到新版后，会在项目页顶部显示醒目的更新提
 flutter pub get
 flutter analyze
 flutter test
-flutter build web --release
+flutter build web --release --web-renderer html --no-web-resources-cdn
 (Get-Content build/web/index.html -Raw).Replace('<base href="/">', '<base href="./">') | Set-Content build/web/index.html -NoNewline
 Copy-Item -Path build/web/* -Destination desktop-shell/web -Recurse -Force
 cd desktop-shell

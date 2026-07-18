@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'app_theme.dart';
 import 'app_settings.dart';
+import 'app_localization.dart';
 import 'bubble_painter.dart';
 import 'exporter.dart';
 import 'file_gateway.dart';
@@ -110,7 +111,7 @@ enum _BubbleStyleProperty {
 }
 
 SnackBar _quickFeedback(String message) => SnackBar(
-      content: Text(message),
+      content: LText(message),
       duration: const Duration(milliseconds: 700),
     );
 
@@ -244,7 +245,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     final accepted = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('选择任意字体颜色'),
+        title: LText('选择任意字体颜色'),
         content: SingleChildScrollView(
           child: ColorPicker(
             pickerColor: selected,
@@ -258,11 +259,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: LText('取消'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('应用颜色'),
+            child: LText('应用颜色'),
           ),
         ],
       ),
@@ -415,12 +416,12 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('项目无法打开'),
-          content: Text('本地项目数据可能已经损坏：$error'),
+          title: LText('项目无法打开'),
+          content: LText('本地项目数据可能已经损坏：$error'),
           actions: [
             FilledButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('知道了'),
+              child: LText('知道了'),
             ),
           ],
         ),
@@ -558,16 +559,16 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       final discard = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('新建图片项目？'),
-          content: const Text('这会替换当前工程。请先保存需要保留的修改。'),
+          title: LText('新建图片项目？'),
+          content: LText('这会替换当前工程。请先保存需要保留的修改。'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
+              child: LText('取消'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('放弃并新建'),
+              child: LText('放弃并新建'),
             ),
           ],
         ),
@@ -607,7 +608,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       setState(() => _processing = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('没有读取到有效图片，请检查文件格式或文件是否损坏。')));
+      ).showSnackBar(SnackBar(content: LText('没有读取到有效图片，请检查文件格式或文件是否损坏。')));
       return;
     }
     if (!mounted) {
@@ -657,7 +658,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       ];
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(messages.join(' '))));
+      ).showSnackBar(SnackBar(content: LText(messages.join(' '))));
     }
   }
 
@@ -668,14 +669,14 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('确认图片顺序'),
+          title: LText('确认图片顺序'),
           content: SizedBox(
             width: 620,
             height: 480,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('当前默认按文件名自然排序；可以拖动调整。字幕将严格按确认后的第 1、2、3 张依次对应。'),
+                LText('当前默认按文件名自然排序；可以拖动调整。字幕将严格按确认后的第 1、2、3 张依次对应。'),
                 const SizedBox(height: 12),
                 Expanded(
                   child: ReorderableListView.builder(
@@ -697,7 +698,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                           child: RawImage(image: page.image, fit: BoxFit.cover),
                         ),
                         title: Text('${index + 1}. ${page.name}'),
-                        subtitle: Text(
+                        subtitle: LText(
                           '${page.originalWidth} × ${page.originalHeight} px',
                         ),
                         trailing: const Icon(Icons.drag_handle),
@@ -711,11 +712,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('取消导入'),
+              child: LText('取消导入'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, [...ordered]),
-              child: const Text('确认此顺序'),
+              child: LText('确认此顺序'),
             ),
           ],
         ),
@@ -730,12 +731,12 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('字幕脚本无法应用'),
-          content: Text(blocking.take(8).join('\n\n')),
+          title: LText('字幕脚本无法应用'),
+          content: LText(blocking.take(8).join('\n\n')),
           actions: [
             FilledButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('返回修改'),
+              child: LText('返回修改'),
             ),
           ],
         ),
@@ -798,12 +799,12 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('字幕格式检查'),
-          content: Text(messages.join('\n\n')),
+          title: LText('字幕格式检查'),
+          content: LText(messages.join('\n\n')),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('返回修改'),
+              child: LText('返回修改'),
             ),
           ],
         ),
@@ -835,26 +836,26 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     final pagesWithCaptions = _pages.where((page) => page.captions.isNotEmpty);
     if (pagesWithCaptions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前没有可排版字幕，请先进入“字幕”导入或添加气泡。')),
+        SnackBar(content: LText('当前没有可排版字幕，请先进入“字幕”导入或添加气泡。')),
       );
       return;
     }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('重新自动排版'),
-        content: Text(
+        title: LText('重新自动排版'),
+        content: LText(
           '将根据图片尺寸重新计算 ${pagesWithCaptions.length} 张图片中的气泡位置。'
           '手动调整过的位置会被替换，但文字、字体、颜色和气泡样式不会改变。',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: LText('取消'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('开始排版'),
+            child: LText('开始排版'),
           ),
         ],
       ),
@@ -981,7 +982,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('选择应用到全部气泡的属性'),
+          title: LText('选择应用到全部气泡的属性'),
           content: SizedBox(
             width: 430,
             height: math.min(470, MediaQuery.sizeOf(context).height * .65),
@@ -993,14 +994,14 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       onPressed: () => setDialogState(
                         () => selected.addAll(_BubbleStyleProperty.values),
                       ),
-                      child: const Text('全选'),
+                      child: LText('全选'),
                     ),
                     TextButton(
                       onPressed: () => setDialogState(selected.clear),
-                      child: const Text('清空'),
+                      child: LText('清空'),
                     ),
                     const Spacer(),
-                    Text('已选 ${selected.length} 项'),
+                    LText('已选 ${selected.length} 项'),
                   ],
                 ),
                 const Divider(height: 1),
@@ -1012,7 +1013,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                           value: selected.contains(property),
-                          title: Text(labels[property]!),
+                          title: LText(labels[property]!),
                           onChanged: (checked) => setDialogState(() {
                             if (checked == true) {
                               selected.add(property);
@@ -1030,13 +1031,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('取消'),
+              child: LText('取消'),
             ),
             FilledButton(
               onPressed: selected.isEmpty
                   ? null
                   : () => Navigator.pop(dialogContext, true),
-              child: const Text('应用'),
+              child: LText('应用'),
             ),
           ],
         ),
@@ -1091,7 +1092,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     final index = page.placements.length;
     final caption = CaptionLine(
       speaker: '',
-      text: '新字幕 ${index + 1}',
+      text: trArgs('新字幕 {index}', {'index': index + 1}),
       bubbleId: '${page.pageId}-b${DateTime.now().microsecondsSinceEpoch}',
     );
     final width = page.originalWidth * .30;
@@ -1126,7 +1127,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     if (page == null || source == null) return;
     _remember(currentPageOnly: true);
     final caption = source.caption.copyWith(
-      text: '${source.caption.text}（副本）',
+      text: '${source.caption.text}${tr('（副本）')}',
       bubbleId: '${page.pageId}-b${DateTime.now().microsecondsSinceEpoch}',
     );
     final bubble = source.copyWith(
@@ -1248,7 +1249,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('导出失败：$error')));
+        ).showSnackBar(SnackBar(content: LText('导出失败：$error')));
       }
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -1272,8 +1273,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('检测到超大图片'),
-            content: Text(
+            title: LText('检测到超大图片'),
+            content: LText(
               '${largestPage!.name} 为 ${largestPage.originalWidth} × ${largestPage.originalHeight}。'
               '单张渲染画布至少需要约 $megabytes MB 内存，PNG 编码期间还会额外占用内存。\n\n'
               '软件会逐张导出且使用二进制写盘，但该图片编码时仍可能短暂停顿。建议先关闭其他大型程序。',
@@ -1281,11 +1282,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('取消'),
+                child: LText('取消'),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('继续逐张导出'),
+                child: LText('继续逐张导出'),
               ),
             ],
           ),
@@ -1299,7 +1300,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('选择要导出的图片'),
+          title: LText('选择要导出的图片'),
           content: SizedBox(
             width: 560,
             height: math.min(520, MediaQuery.sizeOf(context).height * .68),
@@ -1313,11 +1314,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                           ..clear()
                           ..addAll(List.generate(_pages.length, (i) => i));
                       }),
-                      child: const Text('全选'),
+                      child: LText('全选'),
                     ),
                     TextButton(
                       onPressed: () => setDialogState(selected.clear),
-                      child: const Text('清空'),
+                      child: LText('清空'),
                     ),
                     TextButton(
                       onPressed: () => setDialogState(() {
@@ -1325,10 +1326,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                           ..clear()
                           ..add(_selectedPage);
                       }),
-                      child: const Text('仅当前图片'),
+                      child: LText('仅当前图片'),
                     ),
                     const Spacer(),
-                    Text('已选 ${selected.length} / ${_pages.length}'),
+                    LText('已选 ${selected.length} / ${_pages.length}'),
                   ],
                 ),
                 const Divider(height: 1),
@@ -1352,7 +1353,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                           ),
                         ),
                         title: Text('${index + 1}. ${page.name}'),
-                        subtitle: Text(
+                        subtitle: LText(
                           '${page.originalWidth} × ${page.originalHeight} · ${page.placements.length} 个气泡',
                         ),
                         onChanged: (checked) => setDialogState(() {
@@ -1372,7 +1373,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('取消'),
+              child: LText('取消'),
             ),
             FilledButton.icon(
               onPressed: selected.isEmpty
@@ -1382,7 +1383,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                         selected.toList()..sort(),
                       ),
               icon: const Icon(Icons.folder_open_outlined),
-              label: Text('选择目录并导出 ${selected.length} 张'),
+              label: LText('选择目录并导出 ${selected.length} 张'),
             ),
           ],
         ),
@@ -1395,28 +1396,28 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           context: context,
           barrierDismissible: false,
           builder: (context) => AlertDialog(
-            title: const Text('图片已存在'),
-            content: Text('“$fileName”已在导出目录中。是否用当前修改后的成图覆盖它？'),
+            title: LText('图片已存在'),
+            content: LText('“$fileName”已在导出目录中。是否用当前修改后的成图覆盖它？'),
             actions: [
               TextButton(
                 onPressed: () =>
                     Navigator.pop(context, _ExistingImageChoice.cancel),
-                child: const Text('取消导出'),
+                child: LText('取消导出'),
               ),
               TextButton(
                 onPressed: () =>
                     Navigator.pop(context, _ExistingImageChoice.skip),
-                child: const Text('跳过此图'),
+                child: LText('跳过此图'),
               ),
               OutlinedButton(
                 onPressed: () =>
                     Navigator.pop(context, _ExistingImageChoice.overwriteAll),
-                child: const Text('全部覆盖'),
+                child: LText('全部覆盖'),
               ),
               FilledButton(
                 onPressed: () =>
                     Navigator.pop(context, _ExistingImageChoice.overwrite),
-                child: const Text('覆盖此图'),
+                child: LText('覆盖此图'),
               ),
             ],
           ),
@@ -1437,7 +1438,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       final safeName =
           _projectName == '未命名工程' ? '漫画气泡字幕工程.bcs.json' : _projectName;
       final path = await saveBinaryFile(
-        title: '保存气泡字幕工程',
+        title: tr('保存气泡字幕工程'),
         fileName:
             safeName.endsWith('.bcs.json') ? safeName : '$safeName.bcs.json',
         bytes: projectBytes,
@@ -1474,7 +1475,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('保存工程失败：$error')));
+        ).showSnackBar(SnackBar(content: LText('保存工程失败：$error')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -1487,16 +1488,16 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       final discard = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('打开其他工程？'),
-          content: const Text('当前工程有未保存修改。继续打开会放弃这些修改。'),
+          title: LText('打开其他工程？'),
+          content: LText('当前工程有未保存修改。继续打开会放弃这些修改。'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
+              child: LText('取消'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('放弃并打开'),
+              child: LText('放弃并打开'),
             ),
           ],
         ),
@@ -1551,12 +1552,12 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('无法打开工程'),
-          content: Text('$error\n\n请确认文件由本软件生成，且内容未被破坏。'),
+          title: LText('无法打开工程'),
+          content: LText('$error\n\n请确认文件由本软件生成，且内容未被破坏。'),
           actions: [
             FilledButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('知道了'),
+              child: LText('知道了'),
             ),
           ],
         ),
@@ -1570,7 +1571,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       final appliedScript = await showDialog<String>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('匹配字幕脚本'),
+          title: LText('匹配字幕脚本'),
           content: SizedBox(
             width: 620,
             height: 460,
@@ -1587,35 +1588,35 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
             TextButton.icon(
               onPressed: () => _importScriptFile(draft),
               icon: const Icon(Icons.upload_file_outlined),
-              label: const Text('导入 TXT'),
+              label: LText('导入 TXT'),
             ),
             TextButton.icon(
               onPressed: _exportScriptTemplate,
               icon: const Icon(Icons.download_outlined),
-              label: const Text('导出当前模板'),
+              label: LText('导出当前模板'),
             ),
             TextButton.icon(
               onPressed: _showFormatGuide,
               icon: const Icon(Icons.rule_outlined),
-              label: const Text('格式规范'),
+              label: LText('格式规范'),
             ),
             TextButton.icon(
               onPressed: _showAiScriptGuide,
               icon: const Icon(Icons.auto_awesome_outlined),
-              label: const Text('AI 生成指南'),
+              label: LText('AI 生成指南'),
             ),
             TextButton.icon(
               onPressed: () => _showScriptMatchPreview(draft.text),
               icon: const Icon(Icons.fact_check_outlined),
-              label: const Text('检查匹配'),
+              label: LText('检查匹配'),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
+              child: LText('取消'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, draft.text),
-              child: const Text('应用并自动排版'),
+              child: LText('应用并自动排版'),
             ),
           ],
         ),
@@ -1652,11 +1653,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(blocking.isEmpty ? '字幕匹配检查通过' : '字幕匹配检查未通过'),
+        title: LText(blocking.isEmpty ? '字幕匹配检查通过' : '字幕匹配检查未通过'),
         content: SizedBox(
           width: 560,
           child: SingleChildScrollView(
-            child: Text(
+            child: LText(
               blocking.isEmpty
                   ? [
                       '脚本按 [图片 1]、[图片 2] 的出现顺序对应项目图片，不按文件名匹配。',
@@ -1672,7 +1673,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         actions: [
           FilledButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('知道了'),
+            child: LText('知道了'),
           ),
         ],
       ),
@@ -1695,7 +1696,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('字幕文件读取失败：$error')));
+        ).showSnackBar(SnackBar(content: LText('字幕文件读取失败：$error')));
       }
     }
   }
@@ -1705,8 +1706,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     try {
       final text = _scriptForPages(_pages);
       final path = await saveBinaryFile(
-        title: '导出精准字幕模板',
-        fileName: '精准字幕模板.txt',
+        title: tr('导出精准字幕模板'),
+        fileName: tr('精准字幕模板.txt'),
         bytes: Uint8List.fromList(utf8.encode(text)),
         kind: 'text',
       );
@@ -1719,36 +1720,80 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('模板导出失败：$error')));
+        ).showSnackBar(SnackBar(content: LText('模板导出失败：$error')));
       }
     }
+  }
+
+  String _formatGuideText() {
+    const sample = '@格式=BCS顺序字幕脚本\n@版本=2\n@坐标单位=px\n\n'
+        '[图片 1]\n@原文件名=example.png\n@原图尺寸=1080x1920\n\n'
+        '@气泡ID=p1-b1\n@矩形=80,100,520,260\n@尾巴=右下\n@气泡=对话气泡\n@字体=Noto Sans SC\n@字号=34\n@颜色=#141518\n@行距=1.25\n@描边=2\n@白底透明度=100\nCaption text\n\n';
+    return switch (AppLocaleController.instance.languageCode) {
+      'en' => '$sample'
+          'Notes:\n'
+          '• [图片 1], [图片 2] follow the confirmed image order; file names are hints only.\n'
+          '• Every section requires the exact @原图尺寸=widthxheight.\n'
+          '• @矩形=x,y,width,height uses source-image pixels from top-left 0,0.\n'
+          '• Keep @气泡ID stable and unique to preserve manual edits.\n'
+          '• @尾巴 only accepts 左上, 右上, 左下, 右下; the tail is fixed and cannot be dragged.\n'
+          '• @气泡 only accepts 对话气泡, 心理气泡, 旁白框, 耳语气泡, 惊喊气泡.\n'
+          '• @颜色 changes text only. @白底透明度 is 0–100 and changes only the fill.\n'
+          '• Leave one blank line between bubble blocks. Protocol fields remain Chinese.',
+      'ja' => '$sample'
+          '説明：\n'
+          '• [图片 1]、[图片 2] は確認済み画像順に対応し、ファイル名はヒントだけです。\n'
+          '• 各画像段に正確な @原图尺寸=幅x高さ が必要です。\n'
+          '• @矩形=x,y,幅,高さ は元画像ピクセルで、左上が 0,0 です。\n'
+          '• @气泡ID は一意かつ安定させ、手動編集を保持します。\n'
+          '• @尾巴 は 左上、右上、左下、右下 のみで、しっぽは固定されドラッグできません。\n'
+          '• @气泡 は 对话气泡、心理气泡、旁白框、耳语气泡、惊喊气泡 のみです。\n'
+          '• @颜色 は文字だけ、@白底透明度 は 0～100 で背景だけを変更します。\n'
+          '• ブロック間に空行を一つ入れ、プロトコル欄は中国語のままにします。',
+      'ko' => '$sample'
+          '설명:\n'
+          '• [图片 1], [图片 2]는 확인한 이미지 순서에 대응하며 파일명은 힌트일 뿐입니다.\n'
+          '• 모든 구간에 정확한 @原图尺寸=너비x높이가 필요합니다.\n'
+          '• @矩形=x,y,너비,높이는 원본 픽셀이며 왼쪽 위가 0,0입니다.\n'
+          '• @气泡ID는 고유하고 안정적으로 유지해 수동 편집을 보존합니다.\n'
+          '• @尾巴는 左上, 右上, 左下, 右下만 허용되며 꼬리는 고정되어 드래그할 수 없습니다.\n'
+          '• @气泡는 对话气泡, 心理气泡, 旁白框, 耳语气泡, 惊喊气泡만 허용됩니다.\n'
+          '• @颜色은 글자만, @白底透明度는 0–100으로 배경만 변경합니다.\n'
+          '• 말풍선 블록 사이에 빈 줄 하나를 두고 프로토콜 필드는 중국어로 유지합니다.',
+      'zh_TW' => '$sample'
+          '說明：\n'
+          '• [图片 1]、[图片 2] 嚴格對應確認後的圖片順序；檔名只作提示。\n'
+          '• 每段必須填寫精確的 @原图尺寸=寬x高。\n'
+          '• @矩形=x,y,寬,高 使用原圖像素；左上角為 0,0。\n'
+          '• @气泡ID 必須唯一且穩定，用於保留手動編輯。\n'
+          '• @尾巴 只能使用 左上、右上、左下、右下；尾部固定且不可拖曳。\n'
+          '• @气泡 只能使用 对话气泡、心理气泡、旁白框、耳语气泡、惊喊气泡。\n'
+          '• @颜色 只改變文字；@白底透明度 為 0–100，只影響底色。\n'
+          '• 氣泡區塊之間留一個空行；協定欄位保持簡體中文。',
+      _ => '$sample'
+          '说明：\n'
+          '• [图片 1]、[图片 2] 严格对应确认后的图片顺序；文件名只作提示。\n'
+          '• 每张必须填写准确的 @原图尺寸=宽x高。\n'
+          '• @矩形=x,y,宽,高 使用原图像素；左上角为 0,0。\n'
+          '• @气泡ID 必须唯一且稳定，用于保留手工编辑。\n'
+          '• @尾巴 只能使用左上、右上、左下、右下；尾部固定不可拖动。\n'
+          '• @气泡 只能使用对话气泡、心理气泡、旁白框、耳语气泡、惊喊气泡。\n'
+          '• @颜色 只改变文字；@白底透明度 为 0–100，只影响底色。\n'
+          '• 每个气泡块之间留一个空行。',
+    };
   }
 
   void _showFormatGuide() => showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('精准字幕格式规范'),
-          content: const SizedBox(
+          title: LText('精准字幕格式规范'),
+          content: SizedBox(
             width: 700,
             height: 540,
             child: SingleChildScrollView(
               child: SelectableText(
-                '@格式=BCS顺序字幕脚本\n@版本=2\n@坐标单位=px\n\n'
-                '[图片 1]\n@原文件名=示例.png\n@原图尺寸=1080x1920\n\n'
-                '@气泡ID=p1-b1\n@矩形=80,100,520,260\n@尾巴=右下\n@气泡=对话气泡\n@字体=Noto Sans SC\n@字号=34\n@颜色=#141518\n@行距=1.25\n@描边=2\n@白底透明度=100\n这里替换对话\n\n'
-                '说明：\n'
-                '• [图片 1]、[图片 2] 严格对应确认后的第 1、2 张图片；文件名只作提示。\n'
-                '• 每张必须填写 @原图尺寸=宽x高，应用时会与实际图片严格校验。\n'
-                '• @矩形=x,y,宽,高，全部使用原图像素；图片左上角为 0,0。\n'
-                '• @气泡ID 在工程内必须稳定，用于重新应用时保留手工位置。\n'
-                '• 尾巴只能是左上、右上、左下、右下。\n'
-                '• 尾部固定在气泡边缘，不可拖动；只需选择左上、右上、左下或右下。\n'
-                '• 气泡可用对话气泡、心理气泡、旁白框、耳语气泡、惊喊气泡。心理气泡为云朵主体和连续圆点尾；耳语气泡使用虚线轮廓；旁白框不显示尾巴。\n'
-                '• 模板固定使用白色或浅灰填充、黑色细描边；@颜色 只改变内部字体颜色。\n'
-                '• @白底透明度 使用 0–100；100 为完全不透明，0 为完全透明，描边和文字不受影响。\n'
-                '• 每个气泡块之间必须留一个空行。\n'
-                '• 旧版 [文件名] 脚本可导入，软件会按段落出现顺序迁移，绝不会再按文件名匹配。',
-                style: TextStyle(
+                _formatGuideText(),
+                style: const TextStyle(
                   fontFamily: 'monospace',
                   fontSize: 14,
                   height: 1.55,
@@ -1760,35 +1805,52 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           actions: [
             FilledButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('知道了'),
+              child: LText('知道了'),
             ),
           ],
         ),
       );
 
   String _currentProjectContext() {
+    final language = AppLocaleController.instance.languageCode;
     final images = _pages.indexed
         .map(
-          (entry) =>
-              '图片 ${entry.$1 + 1}：${entry.$2.name}，原图尺寸=${entry.$2.originalWidth}x${entry.$2.originalHeight}',
+          (entry) => trArgs(
+            '图片 {index}：{name}，原图尺寸={width}x{height}',
+            {
+              'index': entry.$1 + 1,
+              'name': entry.$2.name,
+              'width': entry.$2.originalWidth,
+              'height': entry.$2.originalHeight,
+            },
+            languageCode: language,
+          ),
         )
         .join('\n');
-    return '# 当前项目的精确输入\n\n'
-        '下面的数据由软件直接生成。图片顺序和尺寸是强制约束，不允许 AI 修改或重新排序。\n\n'
-        '## 图片顺序与原图尺寸\n\n$images\n\n'
-        '## 当前项目完整模板\n\n'
+    return '# ${tr('当前项目的精确输入', languageCode: language)}\n\n'
+        '${tr('下面的数据由软件直接生成。图片顺序和尺寸是强制约束，不允许 AI 修改或重新排序。', languageCode: language)}\n\n'
+        '## ${tr('图片顺序与原图尺寸', languageCode: language)}\n\n$images\n\n'
+        '## ${tr('当前项目完整模板', languageCode: language)}\n\n'
         '```text\n${_scriptForPages(_pages)}\n```\n\n'
-        '请把实际图片、需要加入的对白或旁白，与以上规范和模板一起提供给 AI。AI 必须只返回最终的 BCS 纯文本脚本。';
+        '${tr('请把实际图片、需要加入的对白或旁白，与以上规范和模板一起提供给 AI。AI 必须只返回最终的 BCS 纯文本脚本。', languageCode: language)}';
   }
 
   Future<void> _showAiScriptGuide() async {
-    final exactGuide = await rootBundle.loadString('AI字幕脚本生成指南.md');
+    final language = AppLocaleController.instance.languageCode;
+    final guideAsset = switch (language) {
+      'zh_TW' => 'guides/ai_guide_zh_TW.md',
+      'en' => 'guides/ai_guide_en.md',
+      'ja' => 'guides/ai_guide_ja.md',
+      'ko' => 'guides/ai_guide_ko.md',
+      _ => 'AI字幕脚本生成指南.md',
+    };
+    final exactGuide = await rootBundle.loadString(guideAsset);
     if (!mounted) return;
     final prompt = '$exactGuide\n\n---\n\n${_currentProjectContext()}';
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('完整 AI 字幕脚本生成指南'),
+        title: LText('完整 AI 字幕脚本生成指南'),
         content: SizedBox(
           width: 760,
           height: 520,
@@ -1796,8 +1858,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '以下内容直接读取 AI字幕脚本生成指南.md，并在末尾附加当前项目的真实顺序、原图尺寸和完整模板。',
+                LText(
+                  '以下内容使用当前界面的 AI 指南语言，并在末尾附加当前项目的真实顺序、原图尺寸和完整模板。',
                   style: TextStyle(
                     color: AppColors.pink,
                     fontWeight: FontWeight.w700,
@@ -1817,7 +1879,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('关闭'),
+            child: LText('关闭'),
           ),
           FilledButton.icon(
             onPressed: () async {
@@ -1829,7 +1891,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               }
             },
             icon: const Icon(Icons.copy_all_outlined),
-            label: const Text('复制精确规范 + 当前模板'),
+            label: LText('复制精确规范 + 当前模板'),
           ),
         ],
       ),
@@ -1839,18 +1901,18 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   void _showHelp() => showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.menu_book_outlined, color: AppColors.pink),
-              SizedBox(width: 10),
-              Text('使用指南'),
+              const Icon(Icons.menu_book_outlined, color: AppColors.pink),
+              const SizedBox(width: 10),
+              LText('使用指南'),
             ],
           ),
-          content: const SizedBox(
+          content: SizedBox(
             width: 560,
-            child: Text(
+            child: LText(
               '1. 软件启动后先进入项目页。可以创建、删除或切换项目；名称留空时会按创建时间自动命名。\n\n2. 点击“添加图片”后，图片默认按文件名自然排序，例如 1、2、10。可以在顺序确认窗口继续拖动调整。\n\n3. 点击顶部“字幕”。每个 [图片 N] 段必须包含 @原图尺寸；气泡使用原图像素 @矩形=x,y,宽,高。字幕只按确认顺序对应，不按文件名匹配。\n\n4. 字幕编辑器采用草稿模式；点击取消不会改变工程。稳定的 @气泡ID 可在再次应用时保留手工位置和样式。\n\n5. 单击气泡会立即显示选框；单击画布空白处会关闭选框，直到再次单击气泡。右侧可修改文字、形状、字体、颜色、字号、行距、描边和尾巴方向。\n\n6. 项目不再持续自动保存。点击右上角保存按钮，或切换回项目页时保存一次。导出位于右上角，不属于编辑流程。\n\n图片和字幕始终只在当前设备处理，不会上传。',
-              style: TextStyle(fontSize: 15, height: 1.6),
+              style: const TextStyle(fontSize: 15, height: 1.6),
             ),
           ),
           actions: [
@@ -1860,11 +1922,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 _showFormatGuide();
               },
               icon: const Icon(Icons.rule_outlined),
-              label: const Text('精准格式'),
+              label: LText('精准格式'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('知道了'),
+              child: LText('知道了'),
             ),
           ],
         ),
@@ -1924,7 +1986,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  LText(
                     '浪白漫画字幕工坊',
                     style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
                   ),
@@ -1936,10 +1998,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 ],
               )
             else
-              const Expanded(
-                child: Text(
+              Expanded(
+                child: LText(
                   '浪白漫画字幕工坊',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w900),
                 ),
               ),
             if (wide) ...[
@@ -1957,7 +2022,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                     size: 16,
                   ),
                   const SizedBox(width: 5),
-                  Text(
+                  LText(
                     _dirty ? '有未保存修改' : '已保存 · 本地',
                     style: const TextStyle(
                       fontSize: 11,
@@ -1969,17 +2034,18 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               ),
             IconButton(
               onPressed: _returnToProjects,
-              tooltip: '切换项目',
+              tooltip: tr('切换项目'),
               icon: const Icon(Icons.grid_view_outlined),
             ),
-            IconButton(
-              onPressed: _openProject,
-              tooltip: '打开工程',
-              icon: const Icon(Icons.folder_open_outlined),
-            ),
+            if (wide)
+              IconButton(
+                onPressed: _openProject,
+                tooltip: tr('打开工程'),
+                icon: const Icon(Icons.folder_open_outlined),
+              ),
             IconButton(
               onPressed: _saving ? null : _saveProject,
-              tooltip: '保存工程',
+              tooltip: tr('保存工程'),
               icon: _saving
                   ? const SizedBox(
                       width: 18,
@@ -1988,16 +2054,18 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                     )
                   : const Icon(Icons.save_outlined),
             ),
-            IconButton(
-              onPressed: _showHelp,
-              tooltip: '使用指南',
-              icon: const Icon(Icons.help_outline),
-            ),
-            IconButton(
-              onPressed: _showSettings,
-              tooltip: '设置',
-              icon: const Icon(Icons.settings_outlined),
-            ),
+            if (wide) ...[
+              IconButton(
+                onPressed: _showHelp,
+                tooltip: tr('使用指南'),
+                icon: const Icon(Icons.help_outline),
+              ),
+              IconButton(
+                onPressed: _showSettings,
+                tooltip: tr('设置'),
+                icon: const Icon(Icons.settings_outlined),
+              ),
+            ],
             if (wide)
               FilledButton.icon(
                 onPressed: _exporting ? null : _exportAll,
@@ -2008,13 +2076,50 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.file_download_outlined, size: 18),
-                label: const Text('批量导出'),
+                label: LText('批量导出'),
               )
             else
               IconButton(
                 onPressed: _exporting ? null : _exportAll,
-                tooltip: '批量导出',
+                tooltip: tr('批量导出'),
                 icon: const Icon(Icons.file_download_outlined),
+              ),
+            if (!wide)
+              PopupMenuButton<String>(
+                tooltip: tr('更多操作'),
+                onSelected: (value) {
+                  switch (value) {
+                    case 'open':
+                      _openProject();
+                    case 'help':
+                      _showHelp();
+                    case 'settings':
+                      _showSettings();
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'open',
+                    child: ListTile(
+                      leading: const Icon(Icons.folder_open_outlined),
+                      title: LText('打开工程'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'help',
+                    child: ListTile(
+                      leading: const Icon(Icons.help_outline),
+                      title: LText('使用指南'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'settings',
+                    child: ListTile(
+                      leading: const Icon(Icons.settings_outlined),
+                      title: LText('设置'),
+                    ),
+                  ),
+                ],
               ),
           ],
         ),
@@ -2081,14 +2186,14 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
+                            LText(
                               items[i].$2,
                               style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
-                            Text(
+                            LText(
                               items[i].$3,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -2168,13 +2273,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
             child: Row(
               children: [
-                const Expanded(
-                  child: Text(
+                Expanded(
+                  child: LText(
                     '章节：第01话 初遇',
-                    style: TextStyle(fontWeight: FontWeight.w800),
+                    style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
-                Text(
+                LText(
                   '共${_pages.length}张',
                   style: const TextStyle(fontSize: 12, color: AppColors.muted),
                 ),
@@ -2193,7 +2298,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       : AppColors.muted,
                 ),
                 const Spacer(),
-                const Text(
+                LText(
                   '按确认顺序',
                   style: TextStyle(fontSize: 11, color: AppColors.muted),
                 ),
@@ -2236,7 +2341,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       children: [
                         SizedBox(
                           width: 30,
-                          child: Text(
+                          child: LText(
                             '${index + 1}'.padLeft(2, '0'),
                             style: TextStyle(
                               color: selected ? AppColors.pink : AppColors.ink,
@@ -2269,7 +2374,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                               ),
                               const SizedBox(height: 5),
                               Text(
-                                preview.isEmpty ? '等待匹配字幕' : preview,
+                                preview.isEmpty ? tr('等待匹配字幕') : preview,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -2284,7 +2389,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                               Row(
                                 children: [
                                   Expanded(
-                                    child: Text(
+                                    child: LText(
                                       page.captions.isEmpty
                                           ? '等待字幕'
                                           : '${page.captions.length} 条字幕',
@@ -2304,7 +2409,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                                     color: statusColor,
                                   ),
                                   const SizedBox(width: 4),
-                                  Text(
+                                  LText(
                                     statusText,
                                     style: TextStyle(
                                       fontSize: 10,
@@ -2335,25 +2440,25 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       Icons.add_photo_alternate_outlined,
                       size: 18,
                     ),
-                    label: const Text('添加图片'),
+                    label: LText('添加图片'),
                   ),
                 ),
                 PopupMenuButton<String>(
-                  tooltip: '更多图片选项',
+                  tooltip: tr('更多图片选项'),
                   onSelected: (value) {
                     if (value == 'replace') {
                       _pickImages(replaceProject: true);
                     }
                   },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'replace', child: Text('清空图片并重新导入')),
+                  itemBuilder: (context) => [
+                    PopupMenuItem(value: 'replace', child: LText('清空图片并重新导入')),
                   ],
                 ),
                 Expanded(
                   child: FilledButton.tonalIcon(
                     onPressed: _showScriptEditor,
                     icon: const Icon(Icons.link, size: 18),
-                    label: const Text('匹配字幕'),
+                    label: LText('匹配字幕'),
                   ),
                 ),
               ],
@@ -2375,7 +2480,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           children: [
             Icon(icon, size: 13, color: color),
             const SizedBox(width: 4),
-            Text(
+            LText(
               text,
               style: TextStyle(
                 fontSize: 10,
@@ -2414,7 +2519,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                   child: Container(
                     color: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Text(
+                    child: LText(
                       '${i + 1}',
                       style: const TextStyle(
                         fontSize: 11,
@@ -2436,7 +2541,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         child: FilledButton.icon(
           onPressed: () => _pickImages(),
           icon: const Icon(Icons.folder_open),
-          label: const Text('导入图片'),
+          label: LText('导入图片'),
         ),
       );
     }
@@ -2452,7 +2557,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
+                    child: LText(
                       '当前：第01话 · ${page.name}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -2462,7 +2567,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       ),
                     ),
                   ),
-                  const Text(
+                  LText(
                     '对比：',
                     style: TextStyle(fontSize: 11, color: AppColors.muted),
                   ),
@@ -2474,7 +2579,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       minimumSize: const Size(42, 32),
                       padding: const EdgeInsets.symmetric(horizontal: 7),
                     ),
-                    child: const Text('原图'),
+                    child: LText('原图'),
                   ),
                   Switch(
                     value: _showRendered,
@@ -2488,21 +2593,21 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       minimumSize: const Size(42, 32),
                       padding: const EdgeInsets.symmetric(horizontal: 7),
                     ),
-                    child: const Text('渲染'),
+                    child: LText('渲染'),
                   ),
                   const VerticalDivider(indent: 11, endIndent: 11),
                   IconButton(
                     onPressed: _undoStack.isEmpty ? null : _undo,
-                    tooltip: '撤销',
+                    tooltip: tr('撤销'),
                     icon: const Icon(Icons.undo, size: 20),
                   ),
                   IconButton(
                     onPressed: _redoStack.isEmpty ? null : _redo,
-                    tooltip: '重做',
+                    tooltip: tr('重做'),
                     icon: const Icon(Icons.redo, size: 20),
                   ),
                   PopupMenuButton<String>(
-                    tooltip: '气泡编辑命令',
+                    tooltip: tr('气泡编辑命令'),
                     icon: const Icon(Icons.edit_note, size: 21),
                     onSelected: (value) {
                       switch (value) {
@@ -2521,47 +2626,47 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       }
                     },
                     itemBuilder: (context) => [
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'new',
                         child: ListTile(
-                          leading: Icon(Icons.add_comment_outlined),
-                          title: Text('新建气泡'),
+                          leading: const Icon(Icons.add_comment_outlined),
+                          title: LText('新建气泡'),
                           dense: true,
                         ),
                       ),
                       PopupMenuItem(
                         value: 'duplicate',
                         enabled: _bubble != null,
-                        child: const ListTile(
-                          leading: Icon(Icons.content_copy_outlined),
-                          title: Text('复制气泡'),
+                        child: ListTile(
+                          leading: const Icon(Icons.content_copy_outlined),
+                          title: LText('复制气泡'),
                           dense: true,
                         ),
                       ),
                       PopupMenuItem(
                         value: 'back',
                         enabled: _bubble != null,
-                        child: const ListTile(
-                          leading: Icon(Icons.flip_to_back_outlined),
-                          title: Text('下移一层'),
+                        child: ListTile(
+                          leading: const Icon(Icons.flip_to_back_outlined),
+                          title: LText('下移一层'),
                           dense: true,
                         ),
                       ),
                       PopupMenuItem(
                         value: 'front',
                         enabled: _bubble != null,
-                        child: const ListTile(
-                          leading: Icon(Icons.flip_to_front_outlined),
-                          title: Text('上移一层'),
+                        child: ListTile(
+                          leading: const Icon(Icons.flip_to_front_outlined),
+                          title: LText('上移一层'),
                           dense: true,
                         ),
                       ),
                       PopupMenuItem(
                         value: 'delete',
                         enabled: _bubble != null,
-                        child: const ListTile(
-                          leading: Icon(Icons.delete_outline),
-                          title: Text('删除气泡'),
+                        child: ListTile(
+                          leading: const Icon(Icons.delete_outline),
+                          title: LText('删除气泡'),
                           dense: true,
                         ),
                       ),
@@ -2569,16 +2674,16 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                         PopupMenuItem(
                           value: 'inspector',
                           enabled: _bubble != null,
-                          child: const ListTile(
-                            leading: Icon(Icons.tune),
-                            title: Text('打开属性面板'),
+                          child: ListTile(
+                            leading: const Icon(Icons.tune),
+                            title: LText('打开属性面板'),
                             dense: true,
                           ),
                         ),
                     ],
                   ),
                   const SizedBox(width: 8),
-                  Text(
+                  LText(
                     '${page.originalWidth} × ${page.originalHeight}',
                     style: const TextStyle(
                       fontSize: 12,
@@ -2856,15 +2961,15 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                                         color: Colors.black.withOpacity(.72),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
-                                      child: const Padding(
-                                        padding: EdgeInsets.symmetric(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
                                           horizontal: 9,
                                           vertical: 6,
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            SizedBox(
+                                            const SizedBox(
                                               width: 13,
                                               height: 13,
                                               child: CircularProgressIndicator(
@@ -2872,10 +2977,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                                                 color: Colors.white,
                                               ),
                                             ),
-                                            SizedBox(width: 7),
-                                            Text(
+                                            const SizedBox(width: 7),
+                                            LText(
                                               '正在加载高清原图',
-                                              style: TextStyle(
+                                              style: const TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.w700,
@@ -2908,7 +3013,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       setState(() => _zoom = (_zoom - .1).clamp(.6, 1.5)),
                   icon: const Icon(Icons.remove),
                 ),
-                Text(
+                LText(
                   '${(_zoom * 100).round()}%',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
@@ -2921,10 +3026,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 OutlinedButton.icon(
                   onPressed: () => setState(() => _zoom = 1),
                   icon: const Icon(Icons.fit_screen, size: 17),
-                  label: const Text('适应画布'),
+                  label: LText('适应画布'),
                 ),
                 const Spacer(),
-                Text(
+                LText(
                   '${_selectedPage + 1} / ${_pages.length}',
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
@@ -2932,7 +3037,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 OutlinedButton.icon(
                   onPressed: _showScriptEditor,
                   icon: const Icon(Icons.description_outlined, size: 18),
-                  label: const Text('匹配字幕'),
+                  label: LText('匹配字幕'),
                 ),
               ],
             ),
@@ -2969,13 +3074,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
+                  LText(
                     '这张图片还没有可编辑气泡',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 8),
-                  Text(
+                  LText(
                     _page?.name ?? '请先添加图片',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -2985,7 +3090,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  const Text(
+                  LText(
                     '原图里已经存在的文字属于图片像素，不能直接编辑。你可以匹配字幕，也可以先添加一个空白气泡。',
                     textAlign: TextAlign.center,
                     style: TextStyle(
@@ -3000,7 +3105,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                     child: FilledButton.icon(
                       onPressed: _showScriptEditor,
                       icon: const Icon(Icons.description_outlined),
-                      label: const Text('为图片匹配字幕'),
+                      label: LText('为图片匹配字幕'),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -3009,7 +3114,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                     child: OutlinedButton.icon(
                       onPressed: _page == null ? null : _addBubble,
                       icon: const Icon(Icons.add_comment_outlined),
-                      label: const Text('添加空白气泡'),
+                      label: LText('添加空白气泡'),
                     ),
                   ),
                 ],
@@ -3029,26 +3134,29 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           children: [
             Row(
               children: [
-                const Expanded(
-                  child: Text(
+                Expanded(
+                  child: LText(
                     '气泡属性',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 TextButton.icon(
                   onPressed: _resetCurrentPageLayout,
                   icon: const Icon(Icons.refresh, size: 17),
-                  label: const Text('重置'),
+                  label: LText('重置'),
                 ),
                 IconButton(
                   onPressed: () => setState(() => _inspectorVisible = false),
-                  tooltip: '关闭属性面板',
+                  tooltip: tr('关闭属性面板'),
                   icon: const Icon(Icons.close, size: 19),
                 ),
               ],
             ),
             const SizedBox(height: 6),
-            Text(
+            LText(
                 switch (bubble.shape) {
                   BubbleShape.ellipse => '对话气泡 · 四向斜角指向尾巴',
                   BubbleShape.rounded => '旁白框 · 浅灰底，无尾巴',
@@ -3059,7 +3167,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 style: const TextStyle(color: AppColors.muted, fontSize: 11)),
             if (!compact) ...[
               const SizedBox(height: 4),
-              const Text(
+              LText(
                 '文本内容',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
               ),
@@ -3080,7 +3188,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            const Text(
+            LText(
               '气泡样式',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
             ),
@@ -3106,11 +3214,14 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
             const SizedBox(height: 15),
             Row(
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 70,
-                  child: Text(
+                  child: LText(
                     '字体',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 Expanded(
@@ -3124,7 +3235,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       ].map(
                         (item) => DropdownMenuItem(
                           value: item.$1,
-                          child: Text(
+                          child: LText(
                             item.$2,
                             style: TextStyle(fontFamily: item.$1),
                           ),
@@ -3133,7 +3244,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       for (final family in _importedFonts)
                         DropdownMenuItem(
                           value: family,
-                          child: Text(
+                          child: LText(
                             '已导入 · $family',
                             style: TextStyle(fontFamily: family),
                           ),
@@ -3146,7 +3257,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                           }.contains(bubble.fontFamily))
                         DropdownMenuItem(
                           value: bubble.fontFamily,
-                          child: Text(bubble.fontFamily),
+                          child: LText(bubble.fontFamily),
                         ),
                     ],
                     onChanged: (value) {
@@ -3165,7 +3276,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 const SizedBox(width: 6),
                 IconButton.outlined(
                   onPressed: _importFont,
-                  tooltip: '导入 TTF / OTF / TTC 字体',
+                  tooltip: tr('导入 TTF / OTF / TTC 字体'),
                   icon: const Icon(Icons.file_open_outlined, size: 19),
                 ),
               ],
@@ -3173,11 +3284,14 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
             const SizedBox(height: 10),
             Row(
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 70,
-                  child: Text(
+                  child: LText(
                     '字体颜色',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 for (final color in const [
@@ -3214,7 +3328,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                   ),
                 IconButton.outlined(
                   onPressed: () => _pickFontColor(bubble),
-                  tooltip: '全部颜色 / 输入 HEX',
+                  tooltip: tr('全部颜色 / 输入 HEX'),
                   icon: const Icon(Icons.colorize, size: 18),
                 ),
               ],
@@ -3253,7 +3367,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
             ),
             if (bubbleHasPointer(bubble.shape)) ...[
               const SizedBox(height: 8),
-              const Text(
+              LText(
                 '指向方向',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
               ),
@@ -3274,7 +3388,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                             bubble.copyWith(tailDirection: item.$2),
                             remember: true,
                           ),
-                          tooltip: item.$3,
+                          tooltip: tr(item.$3),
                           icon: Icon(item.$1, size: 19),
                           style: IconButton.styleFrom(
                             backgroundColor: bubble.tailDirection == item.$2
@@ -3292,7 +3406,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              const Text(
+              LText(
                 '尾部位置固定，不可拖动',
                 style: TextStyle(color: AppColors.muted, fontSize: 11),
               ),
@@ -3303,7 +3417,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               child: FilledButton.icon(
                 onPressed: () => _applySelectedStyleToAll(bubble),
                 icon: const Icon(Icons.copy_all_outlined),
-                label: const Text('选择属性并应用到全部'),
+                label: LText('选择属性并应用到全部'),
               ),
             ),
             if (!compact) ...[
@@ -3315,7 +3429,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                     _deleteBubble();
                   },
                   icon: const Icon(Icons.delete_outline),
-                  label: const Text('删除此气泡'),
+                  label: LText('删除此气泡'),
                 ),
               ),
             ],
@@ -3342,7 +3456,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       BubbleShape.whisper => '耳语气泡',
     };
     return Tooltip(
-      message: label,
+      message: tr(label),
       child: Material(
         color: selected ? AppColors.blush : Colors.white,
         shape: RoundedRectangleBorder(
@@ -3364,7 +3478,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                   color: selected ? AppColors.pink : AppColors.ink,
                 ),
                 const SizedBox(height: 2),
-                Text(
+                LText(
                   label.replaceAll('气泡', ''),
                   maxLines: 1,
                   style: TextStyle(
@@ -3395,7 +3509,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           children: [
             SizedBox(
               width: 70,
-              child: Text(
+              child: LText(
                 label,
                 style:
                     const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
@@ -3412,7 +3526,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
             ),
             SizedBox(
               width: 42,
-              child: Text(
+              child: LText(
                 percent
                     ? '${value.round()}%'
                     : value.toStringAsFixed(label == '行间距' ? 1 : 0),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'app_settings.dart';
+import 'app_localization.dart';
 import 'update_service.dart';
 
 Future<AppSettings?> showAppSettingsDialog(
@@ -15,11 +16,11 @@ Future<AppSettings?> showAppSettingsDialog(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setDialogState) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.settings_outlined),
-            SizedBox(width: 10),
-            Text('设置'),
+            const Icon(Icons.settings_outlined),
+            const SizedBox(width: 10),
+            LText('设置'),
           ],
         ),
         content: SizedBox(
@@ -28,9 +29,35 @@ Future<AppSettings?> showAppSettingsDialog(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                LText(
+                  '语言',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: settings.languageCode,
+                  decoration: InputDecoration(
+                    labelText: tr('界面与指南语言'),
+                    prefixIcon: const Icon(Icons.language),
+                  ),
+                  items: [
+                    for (final option in AppLocaleController.languages)
+                      DropdownMenuItem(
+                        value: option.code,
+                        child: Text(option.nativeName),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setDialogState(() {
+                      settings = settings.copyWith(languageCode: value);
+                    });
+                  },
+                ),
+                const Divider(height: 28),
+                LText(
                   '保存与导出',
-                  style: TextStyle(fontWeight: FontWeight.w900),
+                  style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 10),
                 ListTile(
@@ -38,12 +65,12 @@ Future<AppSettings?> showAppSettingsDialog(
                   leading: const Icon(Icons.folder_outlined),
                   title: Text(
                     settings.exportDirectory.isEmpty
-                        ? '尚未设置默认保存目录'
+                        ? tr('尚未设置默认保存目录')
                         : settings.exportDirectory,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  subtitle: const Text('批量成图会以 PNG 图片直接写入这里，不再生成 ZIP'),
+                  subtitle: LText('批量成图会以 PNG 图片直接写入这里，不再生成 ZIP'),
                   trailing: OutlinedButton(
                     onPressed: () async {
                       final directory = await chooseExportDirectory();
@@ -55,13 +82,13 @@ Future<AppSettings?> showAppSettingsDialog(
                         });
                       }
                     },
-                    child: const Text('选择目录'),
+                    child: LText('选择目录'),
                   ),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('每次导出都询问保存位置'),
-                  subtitle: const Text('关闭后直接写入上面的默认目录'),
+                  title: LText('每次导出都询问保存位置'),
+                  subtitle: LText('关闭后直接写入上面的默认目录'),
                   value: settings.askExportLocation,
                   onChanged: (value) => setDialogState(() {
                     settings = settings.copyWith(askExportLocation: value);
@@ -69,8 +96,8 @@ Future<AppSettings?> showAppSettingsDialog(
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('导出文件添加 0001、0002 序号'),
-                  subtitle: const Text('关闭后保留原文件名；同名图片会在覆盖前询问'),
+                  title: LText('导出文件添加 0001、0002 序号'),
+                  subtitle: LText('关闭后保留原文件名；同名图片会在覆盖前询问'),
                   value: settings.numberedExportNames,
                   onChanged: (value) => setDialogState(() {
                     settings = settings.copyWith(numberedExportNames: value);
@@ -85,14 +112,15 @@ Future<AppSettings?> showAppSettingsDialog(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+            child: LText('取消'),
           ),
           FilledButton(
             onPressed: () async {
               await saveAppSettings(settings);
+              AppLocaleController.instance.setLanguage(settings.languageCode);
               if (context.mounted) Navigator.pop(context, settings);
             },
-            child: const Text('保存设置'),
+            child: LText('保存设置'),
           ),
         ],
       ),
@@ -191,16 +219,16 @@ class _UpdateSettingsSectionState extends State<_UpdateSettingsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        LText(
           '软件与更新',
-          style: TextStyle(fontWeight: FontWeight.w900),
+          style: const TextStyle(fontWeight: FontWeight.w900),
         ),
         const SizedBox(height: 8),
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.system_update_alt),
-          title: Text('浪白漫画字幕工坊 $_currentVersion'),
-          subtitle: Text(_statusText),
+          title: LText('浪白漫画字幕工坊 $_currentVersion'),
+          subtitle: LText(_statusText),
           trailing: FilledButton.icon(
             onPressed: _checking
                 ? null
@@ -219,7 +247,7 @@ class _UpdateSettingsSectionState extends State<_UpdateSettingsSection> {
                           : Icons.refresh,
               size: 18,
             ),
-            label: Text(
+            label: LText(
               canInstall
                   ? '安装并重启'
                   : canDownload
@@ -232,9 +260,9 @@ class _UpdateSettingsSectionState extends State<_UpdateSettingsSection> {
             ),
           ),
         ),
-        const Text(
+        LText(
           'Windows Setup 版可在软件内下载并安装；Portable 和其他平台会打开 GitHub Releases。',
-          style: TextStyle(color: Colors.black54, fontSize: 12),
+          style: const TextStyle(color: Colors.black54, fontSize: 12),
         ),
       ],
     );

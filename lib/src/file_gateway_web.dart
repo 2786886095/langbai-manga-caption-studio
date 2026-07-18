@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 
+import 'app_localization.dart' show tr;
 import 'file_gateway.dart' show OpenedBinaryFile;
 
 JSObject? get _desktopBridge {
@@ -144,7 +145,7 @@ Future<void> writeExportImage(
   final bridge = _desktopBridge;
   if (bridge == null) {
     await saveBinaryFile(
-      title: '保存字幕成图',
+      title: tr('保存字幕成图'),
       fileName: fileName,
       bytes: bytes,
       kind: 'image',

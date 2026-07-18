@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'app_localization.dart';
+
 enum BubbleShape { ellipse, rounded, shout, thought, whisper }
 
 enum TailDirection { upLeft, upRight, downLeft, downRight }
@@ -240,7 +242,7 @@ class ImagePage {
       }
     }
     if (placements.isEmpty) issues.add('没有匹配到字幕');
-    return issues;
+    return issues.map(tr).toList(growable: false);
   }
 
   int get issueCount {

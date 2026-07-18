@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app_settings.dart' show AppSettings;
+import 'app_localization.dart' show tr;
 
 Future<File> _settingsFile() async => File(
       '${(await getApplicationSupportDirectory()).path}${Platform.pathSeparator}settings.json',
@@ -27,4 +28,4 @@ Future<void> saveAppSettings(AppSettings settings) async {
 }
 
 Future<String?> chooseExportDirectory() =>
-    FilePicker.platform.getDirectoryPath(dialogTitle: '选择默认保存目录');
+    FilePicker.platform.getDirectoryPath(dialogTitle: tr('选择默认保存目录'));

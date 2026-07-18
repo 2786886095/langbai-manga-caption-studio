@@ -46,8 +46,7 @@ ThemeData buildAppTheme() {
     scaffoldBackgroundColor: AppColors.paper,
     fontFamily: 'Noto Sans SC',
     fontFamilyFallback: const [
-      'PingFang SC',
-      'sans-serif',
+      'Noto Sans SC',
     ],
     dividerColor: AppColors.line,
     splashFactory: InkRipple.splashFactory,

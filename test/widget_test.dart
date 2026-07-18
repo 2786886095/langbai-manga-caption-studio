@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:bubble_caption_studio/src/app.dart';
+import 'package:bubble_caption_studio/src/app_localization.dart';
 import 'package:bubble_caption_studio/src/app_settings.dart';
 import 'package:bubble_caption_studio/src/bubble_painter.dart';
 import 'package:bubble_caption_studio/src/file_gateway.dart';
@@ -71,10 +72,12 @@ void main() {
       'autoSave': true,
       'autoSaveSeconds': 10,
       'numberedExportNames': false,
+      'languageCode': 'ja',
     });
     expect(settings.exportDirectory, r'D:\成图');
     expect(settings.askExportLocation, isFalse);
     expect(settings.numberedExportNames, isFalse);
+    expect(settings.languageCode, 'ja');
     expect(settings.toJson(), isNot(contains('autoSave')));
     expect(settings.toJson(), isNot(contains('autoSaveSeconds')));
   });
@@ -171,6 +174,67 @@ void main() {
       (tail.start.dy + tail.tip.dy + tail.end.dy) / 3,
     );
     expect(hitTestBubble(const [bubble], tailInterior), 0);
+  });
+
+  test('settings reject unsupported language codes', () {
+    final settings = AppSettings.fromJson({'languageCode': 'xx'});
+    expect(settings.languageCode, 'zh_CN');
+    expect(settings.toJson()['languageCode'], 'zh_CN');
+  });
+
+  test('all supported languages translate core interface text', () {
+    expect(tr('设置', languageCode: 'zh_CN'), '设置');
+    expect(tr('设置', languageCode: 'zh_TW'), '設定');
+    expect(tr('设置', languageCode: 'en'), 'Settings');
+    expect(tr('设置', languageCode: 'ja'), '設定');
+    expect(tr('设置', languageCode: 'ko'), '설정');
+    expect(
+      tr('气泡属性', languageCode: 'en'),
+      'Bubble properties',
+    );
+    expect(
+      tr('字幕脚本无法应用', languageCode: 'ja'),
+      '字幕スクリプトを適用できません',
+    );
+    expect(
+      tr('批量导出', languageCode: 'ko'),
+      '일괄 내보내기',
+    );
+  });
+
+  test('script diagnostics follow the selected interface language', () {
+    AppLocaleController.instance.setLanguage('en');
+    addTearDown(() => AppLocaleController.instance.setLanguage('zh_CN'));
+    final parsed = parseCaptionScript('''
+@格式=BCS顺序字幕脚本
+@版本=2
+@坐标单位=px
+
+[图片 1]
+@原图尺寸=bad
+''');
+    expect(parsed.warnings, isNotEmpty);
+    expect(parsed.warnings.first, startsWith('Line '));
+    expect(parsed.warnings.join(), isNot(contains('必须')));
+  });
+
+  testWidgets('all localized AI guides are bundled and preserve BCS tokens', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    for (final asset in const [
+      'AI字幕脚本生成指南.md',
+      'guides/ai_guide_zh_TW.md',
+      'guides/ai_guide_en.md',
+      'guides/ai_guide_ja.md',
+      'guides/ai_guide_ko.md',
+    ]) {
+      final guide = await rootBundle.loadString(asset);
+      expect(guide, contains('@格式=BCS顺序字幕脚本'), reason: asset);
+      expect(guide, contains('@白底透明度=100'), reason: asset);
+      expect(guide, contains('对话气泡'), reason: asset);
+      expect(guide.length, greaterThan(2500), reason: asset);
+    }
   });
 
   test('legacy font names map to bundled local fonts', () {

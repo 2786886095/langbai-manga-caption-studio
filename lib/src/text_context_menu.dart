@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_localization.dart';
+
 /// A predictable Chinese text menu for desktop right-click and mobile long-press.
 Widget buildAppTextContextMenu(
   BuildContext context,
@@ -25,7 +27,7 @@ Widget buildAppTextContextMenu(
       if (!isReadOnly)
         ContextMenuButtonItem(
           type: ContextMenuButtonType.cut,
-          label: '剪切',
+          label: tr('剪切'),
           onPressed: hasSelection
               ? () => closeThen(
                     () => editableTextState.cutSelection(
@@ -36,7 +38,7 @@ Widget buildAppTextContextMenu(
         ),
       ContextMenuButtonItem(
         type: ContextMenuButtonType.copy,
-        label: '复制',
+        label: tr('复制'),
         onPressed: hasSelection
             ? () => closeThen(
                   () => editableTextState.copySelection(
@@ -48,7 +50,7 @@ Widget buildAppTextContextMenu(
       if (!isReadOnly)
         ContextMenuButtonItem(
           type: ContextMenuButtonType.paste,
-          label: '粘贴',
+          label: tr('粘贴'),
           onPressed: () => closeThen(
             () => editableTextState.pasteText(
               SelectionChangedCause.toolbar,
@@ -57,7 +59,7 @@ Widget buildAppTextContextMenu(
         ),
       ContextMenuButtonItem(
         type: ContextMenuButtonType.selectAll,
-        label: '全选',
+        label: tr('全选'),
         onPressed: value.text.isNotEmpty && !isAllSelected
             ? () => closeThen(
                   () => editableTextState.selectAll(

@@ -9,6 +9,7 @@ on:
       - 'web/**'
       - 'assets/**'
       - 'AI字幕脚本生成指南.md'
+      - 'guides/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - '.github/workflows/pages.yml'
@@ -32,7 +33,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build web --release --base-href /langbai-manga-caption-studio/
+      - run: flutter build web --release --web-renderer html --no-web-resources-cdn --base-href /langbai-manga-caption-studio/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

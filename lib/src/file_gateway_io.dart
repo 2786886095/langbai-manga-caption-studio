@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 
 import 'file_gateway.dart' show OpenedBinaryFile;
+import 'app_localization.dart' show tr;
 
 Future<String?> saveBinaryFile({
   required String title,
@@ -44,7 +45,7 @@ Future<List<OpenedBinaryFile>?> pickImageFiles() async {
 
 Future<String?> chooseImageExportDirectory({String? initialDirectory}) =>
     FilePicker.platform.getDirectoryPath(
-      dialogTitle: '选择成图导出文件夹',
+      dialogTitle: tr('选择成图导出文件夹'),
       initialDirectory: initialDirectory,
     );
 
@@ -62,7 +63,7 @@ Future<void> writeExportImage(
 }) async {
   final target = File(_safeExportPath(directory, fileName));
   if (!overwrite && await target.exists()) {
-    throw const FileSystemException('目标图片已存在');
+    throw FileSystemException(tr('目标图片已存在'));
   }
   await target.parent.create(recursive: true);
   await target.writeAsBytes(bytes, flush: true);

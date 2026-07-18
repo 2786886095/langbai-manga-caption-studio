@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
 import 'app_settings.dart';
+import 'app_localization.dart';
 import 'project_store.dart';
 import 'settings_dialog.dart';
 import 'text_context_menu.dart';
@@ -59,7 +60,7 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
     } else if (manual && info.state == 'upToDate') {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('当前已经是最新版本 ${info.currentVersion}'),
+          content: LText('当前已经是最新版本 ${info.currentVersion}'),
           duration: const Duration(milliseconds: 1200),
         ),
       );
@@ -113,7 +114,7 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                LText(
                   title,
                   style: const TextStyle(
                     color: Colors.white,
@@ -122,7 +123,7 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
+                LText(
                   description,
                   style: const TextStyle(color: Colors.white, fontSize: 12),
                 ),
@@ -145,7 +146,7 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
                         ? Icons.download_outlined
                         : Icons.open_in_new,
               ),
-              label: Text(
+              label: LText(
                 downloaded
                     ? '立即安装并重启'
                     : available
@@ -206,7 +207,7 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
 
   String _defaultName(DateTime value) {
     String two(int number) => number.toString().padLeft(2, '0');
-    return '项目 ${value.year}-${two(value.month)}-${two(value.day)} '
+    return '${tr('项目')} ${value.year}-${two(value.month)}-${two(value.day)} '
         '${two(value.hour)}-${two(value.minute)}-${two(value.second)}';
   }
 
@@ -215,23 +216,23 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('新建项目'),
+        title: LText('新建项目'),
         content: SizedBox(
           width: 430,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('可以输入项目名；留空会自动按创建时间命名。'),
+              LText('可以输入项目名；留空会自动按创建时间命名。'),
               const SizedBox(height: 14),
               TextField(
                 controller: controller,
                 autofocus: true,
                 maxLength: 60,
                 contextMenuBuilder: buildAppTextContextMenu,
-                decoration: const InputDecoration(
-                  labelText: '项目名称（可选）',
-                  hintText: '例如：第 01 话 初遇',
+                decoration: InputDecoration(
+                  labelText: tr('项目名称（可选）'),
+                  hintText: tr('例如：第 01 话 初遇'),
                 ),
                 onSubmitted: (_) =>
                     Navigator.pop(context, controller.text.trim()),
@@ -242,11 +243,11 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+            child: LText('取消'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('创建项目'),
+            child: LText('创建项目'),
           ),
         ],
       ),
@@ -277,17 +278,22 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('删除项目？'),
-        content: Text('“${project.name}”及其本地图片、字幕和排版将被永久删除。'),
+        title: LText('删除项目？'),
+        content: LText(
+          trArgs(
+            '“{name}”及其本地图片、字幕和排版将被永久删除。',
+            {'name': project.name},
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: LText('取消'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.pink),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('确认删除'),
+            child: LText('确认删除'),
           ),
         ],
       ),
@@ -308,7 +314,7 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
     final thumbnail = _thumbnailCache[project.id];
     if (thumbnail != null) {
       return Semantics(
-        label: '项目第一张图片：${project.name}',
+        label: trArgs('项目第一张图片：{name}', {'name': project.name}),
         image: true,
         child: Stack(
           children: [
@@ -331,9 +337,9 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
                   color: Colors.black.withOpacity(.72),
                   borderRadius: BorderRadius.circular(5),
                 ),
-                child: const Text(
+                child: LText(
                   '首图',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
@@ -352,92 +358,118 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
         color: AppColors.blush,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: const Column(
+      child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.auto_stories_outlined, color: AppColors.pink),
-          SizedBox(height: 5),
-          Text('暂无首图', style: TextStyle(color: AppColors.muted, fontSize: 10)),
+          const Icon(Icons.auto_stories_outlined, color: AppColors.pink),
+          const SizedBox(height: 5),
+          LText(
+            '暂无首图',
+            style: const TextStyle(color: AppColors.muted, fontSize: 10),
+          ),
         ],
       ),
     );
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        backgroundColor: AppColors.paper,
-        body: SafeArea(
-          child: Column(
-            children: [
-              _updateBanner(),
-              Container(
-                height: 92,
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                decoration: const BoxDecoration(
-                  color: AppColors.panel,
-                  border: Border(bottom: BorderSide(color: AppColors.line)),
-                ),
-                child: Row(
-                  children: [
-                    ClipOval(
-                      child: Image.asset(
-                        'assets/mascot.png',
-                        width: 58,
-                        height: 58,
-                        fit: BoxFit.cover,
-                      ),
+  Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 680;
+    return Scaffold(
+      backgroundColor: AppColors.paper,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _updateBanner(),
+            Container(
+              height: compact ? 72 : 92,
+              padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 24),
+              decoration: const BoxDecoration(
+                color: AppColors.panel,
+                border: Border(bottom: BorderSide(color: AppColors.line)),
+              ),
+              child: Row(
+                children: [
+                  ClipOval(
+                    child: Image.asset(
+                      'assets/mascot.png',
+                      width: compact ? 48 : 58,
+                      height: compact ? 48 : 58,
+                      fit: BoxFit.cover,
                     ),
-                    const SizedBox(width: 14),
-                    const Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
+                  ),
+                  SizedBox(width: compact ? 10 : 14),
+                  Expanded(
+                    child: compact
+                        ? LText(
                             '浪白漫画字幕工坊',
-                            style: TextStyle(
-                              fontSize: 23,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 17,
                               fontWeight: FontWeight.w900,
                             ),
+                          )
+                        : Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              LText(
+                                '浪白漫画字幕工坊',
+                                style: const TextStyle(
+                                  fontSize: 23,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              LText(
+                                '本地项目 · 图片与字幕不会上传',
+                                style: const TextStyle(
+                                  color: AppColors.pink,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
-                          Text(
-                            '本地项目 · 图片与字幕不会上传',
-                            style:
-                                TextStyle(color: AppColors.pink, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
+                  ),
+                  if (compact)
+                    IconButton.filled(
+                      onPressed: _createProject,
+                      tooltip: tr('新建项目'),
+                      icon: const Icon(Icons.add),
+                    )
+                  else ...[
                     FilledButton.icon(
                       onPressed: _createProject,
                       icon: const Icon(Icons.add),
-                      label: const Text('新建项目'),
+                      label: LText('新建项目'),
                     ),
                     const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: () => _checkUpdates(manual: true),
-                      tooltip: '检查更新',
-                      icon: const Icon(Icons.system_update_alt),
-                    ),
-                    IconButton(
-                      onPressed: _showSettings,
-                      tooltip: '设置',
-                      icon: const Icon(Icons.settings_outlined),
-                    ),
                   ],
-                ),
+                  IconButton(
+                    onPressed: () => _checkUpdates(manual: true),
+                    tooltip: tr('检查更新'),
+                    icon: const Icon(Icons.system_update_alt),
+                  ),
+                  IconButton(
+                    onPressed: _showSettings,
+                    tooltip: tr('设置'),
+                    icon: const Icon(Icons.settings_outlined),
+                  ),
+                ],
               ),
-              Expanded(
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _projects.isEmpty
-                        ? _emptyState()
-                        : _projectList(),
-              ),
-            ],
-          ),
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _projects.isEmpty
+                      ? _emptyState()
+                      : _projectList(),
+            ),
+          ],
         ),
-      );
+      ),
+    );
+  }
 
   Widget _emptyState() => Center(
         child: ConstrainedBox(
@@ -460,21 +492,24 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
+              LText(
                 '还没有项目',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              LText(
                 '每个项目独立保存图片、字幕和排版。创建后即可添加图片。',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.muted, height: 1.55),
+                style: const TextStyle(color: AppColors.muted, height: 1.55),
               ),
               const SizedBox(height: 20),
               FilledButton.icon(
                 onPressed: _createProject,
                 icon: const Icon(Icons.add),
-                label: const Text('创建第一个项目'),
+                label: LText('创建第一个项目'),
               ),
             ],
           ),
@@ -519,7 +554,7 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
                             const Spacer(),
                             IconButton(
                               onPressed: () => _deleteProject(project),
-                              tooltip: '删除项目',
+                              tooltip: tr('删除项目'),
                               icon: const Icon(Icons.delete_outline),
                             ),
                           ],
@@ -548,7 +583,7 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
                             ),
                             const SizedBox(width: 6),
                             Expanded(
-                              child: Text(
+                              child: LText(
                                 project.hasData ? '已有工程内容' : '等待添加图片',
                                 style: const TextStyle(
                                   color: AppColors.muted,
@@ -556,7 +591,7 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
                                 ),
                               ),
                             ),
-                            Text(
+                            LText(
                               _updatedLabel(project.updatedAt),
                               style: const TextStyle(
                                 color: AppColors.muted,

@@ -1,0 +1,1 @@
+void setPlatformWindowTitle(String title) {}

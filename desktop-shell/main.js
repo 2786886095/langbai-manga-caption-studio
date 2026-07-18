@@ -121,6 +121,76 @@ async function readSettings() {
   }
 }
 
+const desktopTranslations = {
+  en: {
+    appTitle: 'Langbai Manga Caption Studio · Local workspace',
+    projectFiles: 'Caption projects',
+    captionScripts: 'Caption scripts',
+    archives: 'ZIP archives',
+    saveFile: 'Save file',
+    openProject: 'Open caption project',
+    selectImages: 'Select manga images',
+    images: 'Images',
+    chooseDefaultFolder: 'Choose default save folder',
+    chooseExportFolder: 'Choose image export folder',
+  },
+  ja: {
+    appTitle: '浪白漫画字幕工房 · ローカルワークスペース',
+    projectFiles: '字幕プロジェクト',
+    captionScripts: '字幕スクリプト',
+    archives: 'ZIP アーカイブ',
+    saveFile: 'ファイルを保存',
+    openProject: '字幕プロジェクトを開く',
+    selectImages: '漫画画像を選択',
+    images: '画像',
+    chooseDefaultFolder: '既定の保存フォルダーを選択',
+    chooseExportFolder: '画像の書き出し先を選択',
+  },
+  ko: {
+    appTitle: '랑바이 만화 자막 공방 · 로컬 작업 공간',
+    projectFiles: '자막 프로젝트',
+    captionScripts: '자막 스크립트',
+    archives: 'ZIP 압축 파일',
+    saveFile: '파일 저장',
+    openProject: '자막 프로젝트 열기',
+    selectImages: '만화 이미지 선택',
+    images: '이미지',
+    chooseDefaultFolder: '기본 저장 폴더 선택',
+    chooseExportFolder: '이미지 내보내기 폴더 선택',
+  },
+  zh_TW: {
+    appTitle: '浪白漫畫字幕工坊 · 本機工作區',
+    projectFiles: '氣泡字幕工程',
+    captionScripts: '字幕腳本',
+    archives: 'ZIP 壓縮檔',
+    saveFile: '儲存檔案',
+    openProject: '開啟氣泡字幕工程',
+    selectImages: '選擇漫畫圖片',
+    images: '圖片',
+    chooseDefaultFolder: '選擇預設儲存資料夾',
+    chooseExportFolder: '選擇成圖匯出資料夾',
+  },
+};
+
+const desktopChinese = {
+  appTitle: '浪白漫画字幕工坊 · 本地漫画工作台',
+  projectFiles: '气泡字幕工程',
+  captionScripts: '字幕脚本',
+  archives: 'ZIP 压缩包',
+  saveFile: '保存文件',
+  openProject: '打开气泡字幕工程',
+  selectImages: '选择漫画图片',
+  images: '图片',
+  chooseDefaultFolder: '选择默认保存目录',
+  chooseExportFolder: '选择成图导出文件夹',
+};
+
+async function desktopTranslator(settings = null) {
+  const current = settings || await readSettings();
+  const messages = desktopTranslations[current.languageCode] || desktopChinese;
+  return (key) => messages[key] || desktopChinese[key] || key;
+}
+
 app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors');
 
 function requestBuffer(request) {
@@ -132,14 +202,15 @@ function storageName(value) {
   return String(value || '').replace(/[^A-Za-z0-9_.-]/g, '_');
 }
 
-function createWindow() {
+async function createWindow() {
+  const t = await desktopTranslator();
   const window = new BrowserWindow({
     width: 1440,
     height: 1024,
     minWidth: 960,
     minHeight: 640,
     backgroundColor: '#111216',
-    title: '浪白漫画字幕工坊 · 本地漫画工作台',
+    title: t('appTitle'),
     icon: path.join(__dirname, 'assets', 'app-icon.png'),
     autoHideMenuBar: true,
     webPreferences: {
@@ -153,12 +224,13 @@ function createWindow() {
 }
 
 ipcMain.handle('desktop:save-file', async (_event, request) => {
-  const filters = request.kind === 'project'
-    ? [{ name: '气泡字幕工程', extensions: ['bcs.json'] }]
-    : request.kind === 'text'
-      ? [{ name: '字幕脚本', extensions: ['txt'] }]
-      : [{ name: 'ZIP 压缩包', extensions: ['zip'] }];
   const settings = await readSettings();
+  const t = await desktopTranslator(settings);
+  const filters = request.kind === 'project'
+    ? [{ name: t('projectFiles'), extensions: ['bcs.json'] }]
+    : request.kind === 'text'
+      ? [{ name: t('captionScripts'), extensions: ['txt'] }]
+      : [{ name: t('archives'), extensions: ['zip'] }];
   const directory = settings.exportDirectory && path.isAbsolute(settings.exportDirectory)
     ? settings.exportDirectory
     : null;
@@ -169,7 +241,7 @@ ipcMain.handle('desktop:save-file', async (_event, request) => {
     return filePath;
   }
   const result = await dialog.showSaveDialog({
-    title: request.title || '保存文件',
+    title: request.title || t('saveFile'),
     defaultPath: directory ? path.join(directory, request.fileName) : request.fileName,
     filters,
   });
@@ -179,10 +251,11 @@ ipcMain.handle('desktop:save-file', async (_event, request) => {
 });
 
 ipcMain.handle('desktop:open-project', async () => {
+  const t = await desktopTranslator();
   const result = await dialog.showOpenDialog({
-    title: '打开气泡字幕工程',
+    title: t('openProject'),
     properties: ['openFile'],
-    filters: [{ name: '气泡字幕工程', extensions: ['bcs.json', 'json'] }],
+    filters: [{ name: t('projectFiles'), extensions: ['bcs.json', 'json'] }],
   });
   if (result.canceled || result.filePaths.length === 0) return null;
   const filePath = result.filePaths[0];
@@ -195,10 +268,11 @@ ipcMain.handle('desktop:open-project', async () => {
 });
 
 ipcMain.handle('desktop:pick-image-paths', async () => {
+  const t = await desktopTranslator();
   const result = await dialog.showOpenDialog({
-    title: '选择漫画图片',
+    title: t('selectImages'),
     properties: ['openFile', 'multiSelections'],
-    filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'] }],
+    filters: [{ name: t('images'), extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'] }],
   });
   if (result.canceled) return null;
   for (const filePath of result.filePaths) approvedImagePaths.add(path.resolve(filePath));
@@ -380,8 +454,9 @@ ipcMain.handle('desktop:save-settings', async (_event, request) => {
 });
 
 ipcMain.handle('desktop:choose-export-directory', async () => {
+  const t = await desktopTranslator();
   const result = await dialog.showOpenDialog({
-    title: '选择默认保存目录',
+    title: t('chooseDefaultFolder'),
     properties: ['openDirectory', 'createDirectory'],
   });
   return result.canceled ? null : result.filePaths[0];
@@ -395,6 +470,7 @@ function safeExportTarget(directory, fileName) {
 
 ipcMain.handle('desktop:choose-image-export-directory', async (_event, request = {}) => {
   const settings = await readSettings();
+  const t = await desktopTranslator(settings);
   const configured = settings.exportDirectory && path.isAbsolute(settings.exportDirectory)
     ? settings.exportDirectory
     : null;
@@ -406,7 +482,7 @@ ipcMain.handle('desktop:choose-image-export-directory', async (_event, request =
     ? request.initialDirectory
     : configured;
   const result = await dialog.showOpenDialog({
-    title: '选择成图导出文件夹',
+    title: t('chooseExportFolder'),
     defaultPath: initialDirectory || undefined,
     properties: ['openDirectory', 'createDirectory'],
   });
@@ -479,9 +555,9 @@ ipcMain.handle('desktop:open-update-page', () => {
 
 app.whenReady().then(() => {
   configureAutoUpdater();
-  createWindow();
+  void createWindow();
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) void createWindow();
   });
 });
 
