@@ -108,33 +108,165 @@ Path _bubbleTailPath(BubbleTailGeometry tail) {
     ..close();
 }
 
-Path _thoughtCloudPath(Rect rect) {
-  var cloud = Path()
-    ..addRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: rect.center,
-          width: rect.width * .82,
-          height: rect.height * .66,
-        ),
-        Radius.circular(rect.shortestSide * .28),
-      ),
-    );
-  const count = 14;
-  for (var i = 0; i < count; i++) {
-    final angle = math.pi * 2 * i / count;
-    final center = Offset(
-      rect.center.dx + math.cos(angle) * rect.width * .40,
-      rect.center.dy + math.sin(angle) * rect.height * .38,
-    );
-    final radius = rect.shortestSide * (i.isEven ? .145 : .125);
-    cloud = Path.combine(
-      PathOperation.union,
-      cloud,
-      Path()..addOval(Rect.fromCircle(center: center, radius: radius)),
+double _pillPerimeter(Size size) {
+  final diameter = math.min(size.width, size.height);
+  final straight = math.max(size.width, size.height) - diameter;
+  return math.pi * diameter + straight * 2;
+}
+
+List<Offset> _pillPoints(Rect rect, int count) {
+  final radius = rect.shortestSide / 2;
+  final straight = math.max(rect.width, rect.height) - radius * 2;
+  final semicircle = math.pi * radius;
+  final perimeter = straight * 2 + semicircle * 2;
+
+  Offset pointAt(double distance) {
+    var cursor = distance % perimeter;
+    if (rect.width >= rect.height) {
+      if (cursor <= straight) {
+        return Offset(rect.left + radius + cursor, rect.top);
+      }
+      cursor -= straight;
+      if (cursor <= semicircle) {
+        final angle = -math.pi / 2 + cursor / radius;
+        return Offset(
+          rect.right - radius + math.cos(angle) * radius,
+          rect.center.dy + math.sin(angle) * radius,
+        );
+      }
+      cursor -= semicircle;
+      if (cursor <= straight) {
+        return Offset(rect.right - radius - cursor, rect.bottom);
+      }
+      cursor -= straight;
+      final angle = math.pi / 2 + cursor / radius;
+      return Offset(
+        rect.left + radius + math.cos(angle) * radius,
+        rect.center.dy + math.sin(angle) * radius,
+      );
+    }
+
+    if (cursor <= straight) {
+      return Offset(rect.right, rect.top + radius + cursor);
+    }
+    cursor -= straight;
+    if (cursor <= semicircle) {
+      final angle = cursor / radius;
+      return Offset(
+        rect.center.dx + math.cos(angle) * radius,
+        rect.bottom - radius + math.sin(angle) * radius,
+      );
+    }
+    cursor -= semicircle;
+    if (cursor <= straight) {
+      return Offset(rect.left, rect.bottom - radius - cursor);
+    }
+    cursor -= straight;
+    final angle = math.pi + cursor / radius;
+    return Offset(
+      rect.center.dx + math.cos(angle) * radius,
+      rect.top + radius + math.sin(angle) * radius,
     );
   }
-  return cloud;
+
+  return List.generate(
+    count,
+    (index) => pointAt(perimeter * index / count),
+    growable: false,
+  );
+}
+
+double _circumradius(Offset first, Offset second, Offset third) {
+  final firstToSecond = (second - first).distance;
+  final secondToThird = (third - second).distance;
+  final thirdToFirst = (first - third).distance;
+  final twiceArea = ((second - first).dx * (third - first).dy -
+          (second - first).dy * (third - first).dx)
+      .abs();
+  if (twiceArea < .0001) return firstToSecond / 2;
+  return firstToSecond * secondToThird * thirdToFirst / (2 * twiceArea);
+}
+
+Path _thoughtCloudPath(Rect rect) {
+  if (rect.isEmpty) return Path();
+  final shortest = rect.shortestSide;
+  if (shortest < 8) return Path()..addOval(rect);
+
+  // The body is a capsule decorated with true circular arcs. Both the number
+  // and the radius of the lobes are derived from the current perimeter, so a
+  // resize adds/removes complete lobes instead of stretching fixed circles.
+  final perimeter = _pillPerimeter(rect.size);
+  final targetLobeSize = (shortest * .55).clamp(48.0, 105.0);
+  final minimumForLongSide = (perimeter / shortest).ceil();
+  final lobeCount = math
+      .max(6, math.max((perimeter / targetLobeSize).ceil(), minimumForLongSide))
+      .clamp(6, 32);
+  final protrusion = perimeter / lobeCount * .22;
+  final inner = rect.deflate(protrusion);
+  if (inner.width <= 2 || inner.height <= 2) {
+    return Path()..addOval(rect);
+  }
+
+  final points = _pillPoints(inner, lobeCount);
+  final distanceOnPerimeter = _pillPerimeter(inner.size) / lobeCount;
+  final path = Path()..moveTo(points.first.dx, points.first.dy);
+  for (var index = 0; index < points.length; index++) {
+    final first = points[index];
+    final second = points[(index + 1) % points.length];
+    final chord = second - first;
+    final chordDistance = chord.distance;
+    if (chordDistance < .0001) continue;
+    final outwardNormal = Offset(chord.dy, -chord.dx) / chordDistance;
+    final curvatureOffset = math.max(0.0, distanceOnPerimeter - chordDistance);
+    final midpoint = Offset.lerp(first, second, .5)!;
+    final arcPoint = midpoint + outwardNormal * (protrusion + curvatureOffset);
+    final radius = _circumradius(first, second, arcPoint);
+    path.arcToPoint(
+      second,
+      radius: Radius.circular(radius),
+      clockwise: true,
+    );
+  }
+  return path..close();
+}
+
+List<({Offset center, double radius})> _thoughtTailCircles(
+  Rect rect,
+  BubbleTailGeometry tail,
+) {
+  final anchor = Offset.lerp(tail.start, tail.end, .5)!;
+  final delta = tail.tip - anchor;
+  if (delta.distance == 0) return const [];
+  final direction = delta / delta.distance;
+  final horizontalDistance = direction.dx > 0
+      ? (rect.right - anchor.dx) / direction.dx
+      : direction.dx < 0
+          ? (rect.left - anchor.dx) / direction.dx
+          : double.infinity;
+  final verticalDistance = direction.dy > 0
+      ? (rect.bottom - anchor.dy) / direction.dy
+      : direction.dy < 0
+          ? (rect.top - anchor.dy) / direction.dy
+          : double.infinity;
+  final edge = anchor +
+      direction * math.min(horizontalDistance.abs(), verticalDistance.abs());
+  final shortest = rect.shortestSide;
+  final radii = [
+    (shortest * .035).clamp(3.5, 9.0),
+    (shortest * .024).clamp(2.5, 6.0),
+    (shortest * .014).clamp(1.8, 3.8),
+  ];
+  final gap = (shortest * .008).clamp(1.0, 2.5);
+  final circles = <({Offset center, double radius})>[];
+  var travel = gap + radii.first;
+  for (var i = 0; i < radii.length; i++) {
+    final radius = radii[i];
+    if (i > 0) {
+      travel += radii[i - 1] + radius + gap;
+    }
+    circles.add((center: edge + direction * travel, radius: radius));
+  }
+  return circles;
 }
 
 Path _bubbleShapePath(Rect rect, BubbleShape shape) {
@@ -189,10 +321,8 @@ bool bubbleContainsPoint(BubblePlacement bubble, Offset point) {
     return _bubbleTailPath(tail).contains(point);
   }
 
-  final anchor = Offset.lerp(tail.start, tail.end, .5)!;
-  for (final item in const [(.38, .066), (.68, .045), (.94, .027)]) {
-    final center = Offset.lerp(anchor, tail.tip, item.$1)!;
-    if ((point - center).distance <= rect.shortestSide * item.$2) return true;
+  for (final circle in _thoughtTailCircles(rect, tail)) {
+    if ((point - circle.center).distance <= circle.radius) return true;
   }
   return false;
 }
@@ -295,12 +425,9 @@ class PagePainter extends CustomPainter {
     if (bubble.shape == BubbleShape.thought) {
       canvas.drawPath(shapePath, fill);
       canvas.drawPath(shapePath, stroke);
-      final anchor = Offset.lerp(tail.start, tail.end, .5)!;
-      for (final item in const [(.38, .066), (.68, .045), (.94, .027)]) {
-        final center = Offset.lerp(anchor, tail.tip, item.$1)!;
-        final radius = rect.shortestSide * item.$2;
-        canvas.drawCircle(center, radius, fill);
-        canvas.drawCircle(center, radius, stroke);
+      for (final circle in _thoughtTailCircles(rect, tail)) {
+        canvas.drawCircle(circle.center, circle.radius, fill);
+        canvas.drawCircle(circle.center, circle.radius, stroke);
       }
     } else if (bubble.shape == BubbleShape.ellipse ||
         bubble.shape == BubbleShape.whisper) {
@@ -317,18 +444,23 @@ class PagePainter extends CustomPainter {
       canvas.drawPath(shapePath, stroke);
     }
 
+    final thoughtInset = (rect.shortestSide * .18).clamp(10.0, 34.0);
+    final thoughtWidthFactor =
+        ((rect.width - thoughtInset * 2) / rect.width).clamp(.42, .78);
+    final thoughtHeightFactor =
+        ((rect.height - thoughtInset * 2) / rect.height).clamp(.42, .68);
     final textWidthFactor = switch (bubble.shape) {
       BubbleShape.ellipse => .78,
       BubbleShape.rounded => .84,
       BubbleShape.shout => .74,
-      BubbleShape.thought => .78,
+      BubbleShape.thought => thoughtWidthFactor,
       BubbleShape.whisper => .78,
     };
     final textHeightFactor = switch (bubble.shape) {
       BubbleShape.ellipse => .68,
       BubbleShape.rounded => .72,
       BubbleShape.shout => .62,
-      BubbleShape.thought => .68,
+      BubbleShape.thought => thoughtHeightFactor,
       BubbleShape.whisper => .68,
     };
     TextPainter createTextPainter(double size) => TextPainter(

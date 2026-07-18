@@ -770,4 +770,43 @@ void main() {
     );
     expect(shout.byFile['001.png']!.single.layout!.shape, BubbleShape.shout);
   });
+
+  test('stretched thought bubbles stay solid in both orientations', () {
+    const horizontal = BubblePlacement(
+      caption: CaptionLine(speaker: '', text: 'thought'),
+      x: 20,
+      y: 30,
+      width: 900,
+      height: 160,
+      shape: BubbleShape.thought,
+    );
+
+    for (var x = 100.0; x <= 840; x += 40) {
+      expect(
+        bubbleContainsPoint(horizontal, Offset(x, 110)),
+        isTrue,
+        reason: 'The wide thought bubble must not develop a hole at x=$x.',
+      );
+    }
+    expect(bubbleContainsPoint(horizontal, const Offset(20, 30)), isFalse);
+    expect(bubbleContainsPoint(horizontal, const Offset(470, 110)), isTrue);
+
+    const vertical = BubblePlacement(
+      caption: CaptionLine(speaker: '', text: 'thought'),
+      x: 30,
+      y: 20,
+      width: 160,
+      height: 900,
+      shape: BubbleShape.thought,
+    );
+    for (var y = 100.0; y <= 840; y += 40) {
+      expect(
+        bubbleContainsPoint(vertical, Offset(110, y)),
+        isTrue,
+        reason: 'The tall thought bubble must not develop a hole at y=$y.',
+      );
+    }
+    expect(bubbleContainsPoint(vertical, const Offset(30, 20)), isFalse);
+    expect(bubbleContainsPoint(vertical, const Offset(110, 470)), isTrue);
+  });
 }
