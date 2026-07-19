@@ -13,6 +13,7 @@ import 'package:bubble_caption_studio/src/page_collection.dart';
 import 'package:bubble_caption_studio/src/project_codec.dart';
 import 'package:bubble_caption_studio/src/script_parser.dart';
 import 'package:bubble_caption_studio/src/text_context_menu.dart';
+import 'package:bubble_caption_studio/src/workspace_screen.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +27,38 @@ void main() {
     final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(app.title, '浪白漫画字幕工坊');
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  test('workspace chooses dedicated phone layouts and clamps dialogs', () {
+    expect(
+      workspaceLayoutModeFor(const Size(390, 844)),
+      WorkspaceLayoutMode.mobilePortrait,
+    );
+    expect(
+      workspaceLayoutModeFor(const Size(844, 390)),
+      WorkspaceLayoutMode.mobileLandscape,
+    );
+    expect(
+      workspaceLayoutModeFor(const Size(1440, 900)),
+      WorkspaceLayoutMode.desktop,
+    );
+
+    expect(
+      workspaceDialogContentSize(
+        const Size(390, 844),
+        maxWidth: 760,
+        maxHeight: 540,
+      ),
+      const Size(342, 540),
+    );
+    expect(
+      workspaceDialogContentSize(
+        const Size(844, 390),
+        maxWidth: 760,
+        maxHeight: 540,
+      ),
+      const Size(760, 200),
+    );
   });
 
   testWidgets('editable text exposes the Chinese right-click menu', (

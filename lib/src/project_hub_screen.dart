@@ -102,71 +102,92 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
             : available
                 ? '检测完成。只有点击下载后才会获取安装包，不再启动即后台下载。'
                 : '安装包正在后台下载，完成后可以直接在软件内安装。';
-    return Container(
-      width: double.infinity,
-      color: AppColors.pink,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
-      child: Row(
-        children: [
-          const Icon(Icons.system_update_alt, color: Colors.white, size: 28),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                LText(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                LText(
-                  description,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                ),
-              ],
+    final action = downloaded || external || available
+        ? FilledButton.icon(
+            onPressed: available
+                ? _downloadUpdate
+                : () => installOrOpenAppUpdate(info),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: AppColors.pink,
             ),
+            icon: Icon(
+              downloaded
+                  ? Icons.restart_alt
+                  : available
+                      ? Icons.download_outlined
+                      : Icons.open_in_new,
+            ),
+            label: LText(
+              downloaded
+                  ? '立即安装并重启'
+                  : available
+                      ? '下载更新'
+                      : '前往 GitHub 更新',
+            ),
+          )
+        : LinearProgressIndicator(
+            value: info.progress > 0 ? info.progress / 100 : null,
+            minHeight: 8,
+            color: Colors.white,
+            backgroundColor: Colors.white30,
+            borderRadius: BorderRadius.circular(8),
+          );
+    final message = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.system_update_alt, color: Colors.white, size: 26),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LText(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 2),
+              LText(
+                description,
+                style: const TextStyle(color: Colors.white, fontSize: 11),
+              ),
+            ],
           ),
-          if (downloaded || external || available)
-            FilledButton.icon(
-              onPressed: available
-                  ? _downloadUpdate
-                  : () => installOrOpenAppUpdate(info),
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: AppColors.pink,
-              ),
-              icon: Icon(
-                downloaded
-                    ? Icons.restart_alt
-                    : available
-                        ? Icons.download_outlined
-                        : Icons.open_in_new,
-              ),
-              label: LText(
-                downloaded
-                    ? '立即安装并重启'
-                    : available
-                        ? '下载更新'
-                        : '前往 GitHub 更新',
-              ),
-            )
-          else
-            SizedBox(
-              width: 180,
-              child: LinearProgressIndicator(
-                value: info.progress > 0 ? info.progress / 100 : null,
-                minHeight: 8,
-                color: Colors.white,
-                backgroundColor: Colors.white30,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-        ],
-      ),
+        ),
+      ],
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 600;
+        return Container(
+          width: double.infinity,
+          color: AppColors.pink,
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 12 : 24,
+            vertical: compact ? 10 : 13,
+          ),
+          child: compact
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    message,
+                    const SizedBox(height: 9),
+                    action,
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: message),
+                    const SizedBox(width: 16),
+                    SizedBox(width: 190, child: action),
+                  ],
+                ),
+        );
+      },
     );
   }
 
@@ -518,13 +539,14 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
 
   Widget _projectList() => LayoutBuilder(
         builder: (context, constraints) {
+          final compact = constraints.maxWidth < 680;
           final columns = constraints.maxWidth >= 1120
               ? 3
               : constraints.maxWidth >= 720
                   ? 2
                   : 1;
           return GridView.builder(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(compact ? 12 : 24),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: columns,
               mainAxisExtent: 216,
@@ -544,7 +566,7 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
                   onTap: () => _openProject(project),
                   borderRadius: BorderRadius.circular(12),
                   child: Padding(
-                    padding: const EdgeInsets.all(18),
+                    padding: EdgeInsets.all(compact ? 14 : 18),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
