@@ -117,6 +117,39 @@ SnackBar _quickFeedback(String message) => SnackBar(
 
 enum _ExistingImageChoice { overwrite, overwriteAll, skip, cancel }
 
+enum WorkspaceLayoutMode { desktop, mobilePortrait, mobileLandscape }
+
+WorkspaceLayoutMode workspaceLayoutModeFor(Size size) {
+  if (size.width >= 1180) return WorkspaceLayoutMode.desktop;
+  return size.height >= size.width
+      ? WorkspaceLayoutMode.mobilePortrait
+      : WorkspaceLayoutMode.mobileLandscape;
+}
+
+Size workspaceDialogContentSize(
+  Size viewport, {
+  required double maxWidth,
+  required double maxHeight,
+}) =>
+    Size(
+      math.min(maxWidth, math.max(220, viewport.width - 48)),
+      math.min(maxHeight, math.max(120, viewport.height - 190)),
+    );
+
+Widget workspaceDialogContent(
+  BuildContext context, {
+  required double maxWidth,
+  required double maxHeight,
+  required Widget child,
+}) {
+  final size = workspaceDialogContentSize(
+    MediaQuery.sizeOf(context),
+    maxWidth: maxWidth,
+    maxHeight: maxHeight,
+  );
+  return SizedBox(width: size.width, height: size.height, child: child);
+}
+
 class WorkspaceScreen extends StatefulWidget {
   const WorkspaceScreen({
     super.key,
@@ -164,6 +197,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   String? _activeSourcePageId;
   String? _loadingSourcePageId;
   int _sourceLoadGeneration = 0;
+  int _mobileDestination = 2;
 
   ImagePage? get _page =>
       _pages.isEmpty ? null : _pages[_selectedPage.clamp(0, _pages.length - 1)];
@@ -670,9 +704,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: LText('确认图片顺序'),
-          content: SizedBox(
-            width: 620,
-            height: 480,
+          content: workspaceDialogContent(
+            context,
+            maxWidth: 620,
+            maxHeight: 480,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1572,9 +1607,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: LText('匹配字幕脚本'),
-          content: SizedBox(
-            width: 620,
-            height: 460,
+          content: workspaceDialogContent(
+            context,
+            maxWidth: 620,
+            maxHeight: 460,
             child: TextField(
               controller: draft,
               expands: true,
@@ -1787,9 +1823,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: LText('精准字幕格式规范'),
-          content: SizedBox(
-            width: 700,
-            height: 540,
+          content: workspaceDialogContent(
+            context,
+            maxWidth: 700,
+            maxHeight: 540,
             child: SingleChildScrollView(
               child: SelectableText(
                 _formatGuideText(),
@@ -1851,9 +1888,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: LText('完整 AI 字幕脚本生成指南'),
-        content: SizedBox(
-          width: 760,
-          height: 520,
+        content: workspaceDialogContent(
+          context,
+          maxWidth: 760,
+          maxHeight: 520,
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1934,7 +1972,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 1180;
+    final layoutMode = workspaceLayoutModeFor(MediaQuery.sizeOf(context));
+    final desktop = layoutMode == WorkspaceLayoutMode.desktop;
+    final portrait = layoutMode == WorkspaceLayoutMode.mobilePortrait;
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyS, control: true):
@@ -1950,14 +1990,24 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       child: Focus(
         autofocus: true,
         child: Scaffold(
+          bottomNavigationBar:
+              portrait && !_processing ? _mobileNavigationBar() : null,
           body: SafeArea(
             child: _processing
                 ? const Center(child: CircularProgressIndicator())
                 : Column(
                     children: [
-                      _header(wide),
+                      desktop ? _header(true) : _mobileHeader(portrait),
                       const Divider(height: 1),
-                      Expanded(child: wide ? _desktopBody() : _compactBody()),
+                      Expanded(
+                        child: switch (layoutMode) {
+                          WorkspaceLayoutMode.desktop => _desktopBody(),
+                          WorkspaceLayoutMode.mobilePortrait =>
+                            _mobilePortraitBody(),
+                          WorkspaceLayoutMode.mobileLandscape =>
+                            _mobileLandscapeBody(),
+                        },
+                      ),
                     ],
                   ),
           ),
@@ -1965,6 +2015,104 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       ),
     );
   }
+
+  Widget _mobileHeader(bool portrait) => Container(
+        height: portrait ? 60 : 56,
+        color: AppColors.panel,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          children: [
+            IconButton(
+              onPressed: _returnToProjects,
+              tooltip: tr('切换项目'),
+              icon: const Icon(Icons.arrow_back),
+            ),
+            ClipOval(
+              child: Image.asset(
+                'assets/mascot.png',
+                width: 36,
+                height: 36,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _projectName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Icon(
+                        _dirty ? Icons.circle : Icons.check_circle,
+                        size: 10,
+                        color: _dirty ? AppColors.warning : AppColors.success,
+                      ),
+                      const SizedBox(width: 4),
+                      LText(
+                        _dirty ? '有未保存修改' : '已保存 · 本地',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              onPressed: _saving ? null : _saveProject,
+              tooltip: tr('保存工程'),
+              icon: _saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_outlined),
+            ),
+            IconButton(
+              onPressed: _exporting ? null : _exportAll,
+              tooltip: tr('批量导出'),
+              icon: _exporting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.file_download_outlined),
+            ),
+            PopupMenuButton<String>(
+              tooltip: tr('更多操作'),
+              onSelected: (value) {
+                switch (value) {
+                  case 'open':
+                    _openProject();
+                  case 'help':
+                    _showHelp();
+                  case 'settings':
+                    _showSettings();
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(value: 'open', child: LText('打开工程')),
+                PopupMenuItem(value: 'help', child: LText('使用指南')),
+                PopupMenuItem(value: 'settings', child: LText('设置')),
+              ],
+            ),
+          ],
+        ),
+      );
 
   Widget _header(bool wide) => Container(
         height: wide ? 104 : 72,
@@ -2250,14 +2398,314 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         ],
       );
 
-  Widget _compactBody() => Column(
-        children: [
-          SizedBox(height: 100, child: _horizontalPages()),
-          const Divider(height: 1),
-          Expanded(child: _workspace(compact: true)),
-          SizedBox(height: 255, child: _inspector(compact: true)),
+  Widget _mobilePortraitBody() => _workspace(compact: true);
+
+  Widget _mobileLandscapeBody() => LayoutBuilder(
+        builder: (context, constraints) {
+          final narrow = constraints.maxWidth < 760;
+          final pagesWidth = narrow ? 184.0 : 224.0;
+          final inspectorWidth = narrow ? 224.0 : 284.0;
+          return Row(
+            children: [
+              SizedBox(
+                width: pagesWidth,
+                child: _mobilePagePanel(compact: true),
+              ),
+              const VerticalDivider(width: 1),
+              Expanded(child: _workspace(compact: true)),
+              const VerticalDivider(width: 1),
+              SizedBox(
+                width: inspectorWidth,
+                child: _inspector(compact: true, allowClose: false),
+              ),
+            ],
+          );
+        },
+      );
+
+  Widget _mobileNavigationBar() => NavigationBar(
+        height: 64,
+        selectedIndex: _mobileDestination,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        onDestinationSelected: _openMobileDestination,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.collections_outlined),
+            selectedIcon: Icon(Icons.collections),
+            label: '图片',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.subtitles_outlined),
+            selectedIcon: Icon(Icons.subtitles),
+            label: '字幕',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.edit_outlined),
+            selectedIcon: Icon(Icons.edit),
+            label: '画布',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.auto_fix_high_outlined),
+            selectedIcon: Icon(Icons.auto_fix_high),
+            label: '排版',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.tune_outlined),
+            selectedIcon: Icon(Icons.tune),
+            label: '属性',
+          ),
         ],
       );
+
+  Future<void> _openMobileDestination(int index) async {
+    setState(() => _mobileDestination = index);
+    switch (index) {
+      case 0:
+        await _showMobilePagesSheet();
+      case 1:
+        await _showScriptEditor();
+      case 2:
+        return;
+      case 3:
+        await _runLayoutStep();
+      case 4:
+        await _showMobileInspectorSheet();
+    }
+    if (mounted) setState(() => _mobileDestination = 2);
+  }
+
+  Future<void> _showMobilePagesSheet() => showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) => DraggableScrollableSheet(
+          initialChildSize: .72,
+          minChildSize: .38,
+          maxChildSize: .94,
+          expand: false,
+          builder: (context, controller) => _mobileSheet(
+            child: _mobilePagePanel(
+              controller: controller,
+              onPageSelected: () => Navigator.pop(sheetContext),
+            ),
+          ),
+        ),
+      );
+
+  Future<void> _showMobileInspectorSheet() {
+    if (_bubble == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        _quickFeedback('请先点击一个气泡，再打开属性'),
+      );
+      return Future.value();
+    }
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => DraggableScrollableSheet(
+        initialChildSize: .68,
+        minChildSize: .34,
+        maxChildSize: .96,
+        expand: false,
+        builder: (context, controller) => _mobileSheet(
+          child: _inspector(
+            compact: true,
+            controller: controller,
+            onClose: () => Navigator.pop(sheetContext),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _mobileSheet({required Widget child}) => Material(
+        color: AppColors.panel,
+        clipBehavior: Clip.antiAlias,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 38,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.line,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Expanded(child: child),
+          ],
+        ),
+      );
+
+  Widget _mobilePagePanel({
+    ScrollController? controller,
+    VoidCallback? onPageSelected,
+    bool compact = false,
+  }) {
+    final matched = _pages.where((page) => page.captions.isNotEmpty).length;
+    return ColoredBox(
+      color: AppColors.panel,
+      child: Column(
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(compact ? 10 : 16, 10, 10, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: LText(
+                    '图片 · ${_pages.length} 张',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                _statusPill(
+                  Icons.subtitles_outlined,
+                  '$matched/${_pages.length}',
+                  matched == _pages.length && _pages.isNotEmpty
+                      ? AppColors.success
+                      : AppColors.muted,
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: _pages.isEmpty
+                ? Center(
+                    child: FilledButton.icon(
+                      onPressed: () => _pickImages(),
+                      icon: const Icon(Icons.add_photo_alternate_outlined),
+                      label: LText('添加图片'),
+                    ),
+                  )
+                : ListView.separated(
+                    controller: controller,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                    itemCount: _pages.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 4),
+                    itemBuilder: (context, index) {
+                      final page = _pages[index];
+                      final selected = index == _selectedPage;
+                      return Material(
+                        color: selected ? AppColors.blush : Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(9),
+                          side: BorderSide(
+                            color:
+                                selected ? AppColors.pink : Colors.transparent,
+                          ),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(9),
+                          onTap: () {
+                            _selectPage(index);
+                            onPageSelected?.call();
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(7),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: RawImage(
+                                    image: page.image,
+                                    width: compact ? 52 : 64,
+                                    height: compact ? 52 : 64,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                const SizedBox(width: 9),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${index + 1}. ${page.name}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      LText(
+                                        page.captions.isEmpty
+                                            ? '等待匹配字幕'
+                                            : '${page.captions.length} 条字幕',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: page.captions.isEmpty
+                                              ? AppColors.muted
+                                              : AppColors.success,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (selected)
+                                  const Icon(
+                                    Icons.check_circle,
+                                    size: 18,
+                                    color: AppColors.pink,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _pickImages(),
+                    style: OutlinedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: compact ? 6 : 12,
+                      ),
+                    ),
+                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                    label: LText('添加'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: _showScriptEditor,
+                    style: FilledButton.styleFrom(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: compact ? 6 : 12,
+                      ),
+                    ),
+                    icon: const Icon(Icons.link),
+                    label: LText('匹配字幕'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _pageRail() {
     final visible = <MapEntry<int, ImagePage>>[
@@ -2492,45 +2940,52 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         ),
       );
 
-  Widget _horizontalPages() => ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.all(10),
-        itemCount: _pages.length,
-        itemBuilder: (_, i) => GestureDetector(
-          onTap: () => _selectPage(i),
-          child: Container(
-            width: 84,
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: i == _selectedPage ? AppColors.pink : AppColors.line,
-                width: i == _selectedPage ? 2 : 1,
-              ),
-              borderRadius: BorderRadius.circular(7),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                RawImage(image: _pages[i].image, fit: BoxFit.cover),
-                Positioned(
-                  left: 4,
-                  bottom: 3,
-                  child: Container(
-                    color: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: LText(
-                      '${i + 1}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
+  Widget _compactCanvasToolbar(ImagePage page) => Container(
+        height: 44,
+        padding: const EdgeInsets.only(left: 10, right: 2),
+        color: AppColors.panel,
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${_selectedPage + 1}. ${page.name}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
                 ),
-              ],
+              ),
             ),
-          ),
+            IconButton(
+              onPressed: () => setState(() => _showRendered = !_showRendered),
+              tooltip: tr(_showRendered ? '查看原图' : '查看渲染'),
+              icon: Icon(
+                _showRendered ? Icons.visibility : Icons.visibility_off,
+                size: 19,
+              ),
+            ),
+            IconButton(
+              onPressed: _undoStack.isEmpty ? null : _undo,
+              tooltip: tr('撤销'),
+              icon: const Icon(Icons.undo, size: 19),
+            ),
+            IconButton(
+              onPressed: _redoStack.isEmpty ? null : _redo,
+              tooltip: tr('重做'),
+              icon: const Icon(Icons.redo, size: 19),
+            ),
+            IconButton(
+              onPressed: _addBubble,
+              tooltip: tr('新建气泡'),
+              icon: const Icon(Icons.add_comment_outlined, size: 19),
+            ),
+            IconButton(
+              onPressed: _bubble == null ? null : _showMobileInspectorSheet,
+              tooltip: tr('气泡属性'),
+              icon: const Icon(Icons.tune, size: 19),
+            ),
+          ],
         ),
       );
 
@@ -2692,7 +3147,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                   ),
                 ],
               ),
-            ),
+            )
+          else
+            _compactCanvasToolbar(page),
           Expanded(
             child: LayoutBuilder(
               builder: (_, box) {
@@ -3003,8 +3460,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
             ),
           ),
           Container(
-            height: 54,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+            height: compact ? 48 : 54,
+            padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 14),
             color: AppColors.panel,
             child: Row(
               children: [
@@ -3022,23 +3479,31 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       setState(() => _zoom = (_zoom + .1).clamp(.6, 1.5)),
                   icon: const Icon(Icons.add),
                 ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: () => setState(() => _zoom = 1),
-                  icon: const Icon(Icons.fit_screen, size: 17),
-                  label: LText('适应画布'),
-                ),
+                if (!compact) const SizedBox(width: 8),
+                if (!compact)
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => _zoom = 1),
+                    icon: const Icon(Icons.fit_screen, size: 17),
+                    label: LText('适应画布'),
+                  ),
                 const Spacer(),
                 LText(
                   '${_selectedPage + 1} / ${_pages.length}',
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 const Spacer(),
-                OutlinedButton.icon(
-                  onPressed: _showScriptEditor,
-                  icon: const Icon(Icons.description_outlined, size: 18),
-                  label: LText('匹配字幕'),
-                ),
+                if (compact)
+                  IconButton(
+                    onPressed: _showScriptEditor,
+                    tooltip: tr('匹配字幕'),
+                    icon: const Icon(Icons.description_outlined, size: 19),
+                  )
+                else
+                  OutlinedButton.icon(
+                    onPressed: _showScriptEditor,
+                    icon: const Icon(Icons.description_outlined, size: 18),
+                    label: LText('匹配字幕'),
+                  ),
               ],
             ),
           ),
@@ -3047,13 +3512,19 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     );
   }
 
-  Widget _inspector({bool compact = false}) {
+  Widget _inspector({
+    bool compact = false,
+    ScrollController? controller,
+    VoidCallback? onClose,
+    bool allowClose = true,
+  }) {
     final bubble = _bubble;
     if (bubble == null) {
       return ColoredBox(
         color: AppColors.panel,
         child: Center(
           child: SingleChildScrollView(
+            controller: controller,
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 300),
@@ -3128,6 +3599,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     return ColoredBox(
       color: AppColors.panel,
       child: SingleChildScrollView(
+        controller: controller,
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3148,11 +3620,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                   icon: const Icon(Icons.refresh, size: 17),
                   label: LText('重置'),
                 ),
-                IconButton(
-                  onPressed: () => setState(() => _inspectorVisible = false),
-                  tooltip: tr('关闭属性面板'),
-                  icon: const Icon(Icons.close, size: 19),
-                ),
+                if (allowClose)
+                  IconButton(
+                    onPressed: onClose ??
+                        () => setState(() => _inspectorVisible = false),
+                    tooltip: tr('关闭属性面板'),
+                    icon: const Icon(Icons.close, size: 19),
+                  ),
               ],
             ),
             const SizedBox(height: 6),
@@ -3193,7 +3667,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
-            Row(
+            Wrap(
+              spacing: 5,
+              runSpacing: 5,
               children: [
                 for (final shape in const [
                   BubbleShape.ellipse,
@@ -3203,7 +3679,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                   BubbleShape.shout,
                 ])
                   SizedBox(
-                    width: 58,
+                    width: compact ? 48 : 58,
                     child: Padding(
                       padding: const EdgeInsets.only(right: 5),
                       child: _shapeButton(shape, bubble),
@@ -3226,6 +3702,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 ),
                 Expanded(
                   child: DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: bubble.fontFamily,
                     items: [
                       ...const [
@@ -3282,7 +3759,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               ],
             ),
             const SizedBox(height: 10),
-            Row(
+            Wrap(
+              spacing: 2,
+              runSpacing: 7,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 SizedBox(
                   width: 70,
