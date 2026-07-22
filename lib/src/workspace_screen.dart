@@ -10,6 +10,7 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'app_theme.dart';
 import 'app_settings.dart';
 import 'app_localization.dart';
+import 'bcs_script_exporter.dart';
 import 'bubble_painter.dart';
 import 'exporter.dart';
 import 'file_gateway.dart';
@@ -426,7 +427,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         _importedFonts
           ..clear()
           ..addAll(project.fonts.keys);
-        _script.text = editedScript ?? _scriptForPages(project.pages);
+        _script.text = editedScript ?? buildBcsScript(project.pages);
         _projectThumbnailBase64 = thumbnail;
         _selectedPage = 0;
         _selectedBubble = 0;
@@ -530,63 +531,6 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     }
   }
 
-  String _scriptForPages(List<ImagePage> pages) {
-    final output = StringBuffer();
-    output
-      ..writeln('@格式=BCS顺序字幕脚本')
-      ..writeln('@版本=2')
-      ..writeln('@坐标单位=px')
-      ..writeln();
-    for (var pageIndex = 0; pageIndex < pages.length; pageIndex++) {
-      final page = pages[pageIndex];
-      output
-        ..writeln('[图片 ${pageIndex + 1}]')
-        ..writeln('@原文件名=${page.name}')
-        ..writeln('@原图尺寸=${page.originalWidth}x${page.originalHeight}')
-        ..writeln();
-      for (var i = 0; i < page.captions.length; i++) {
-        final caption = page.captions[i];
-        final bubble = page.placements[i];
-        final bubbleId = caption.bubbleId.isEmpty
-            ? 'p${pageIndex + 1}-b${i + 1}'
-            : caption.bubbleId;
-        output
-          ..writeln('@气泡ID=$bubbleId')
-          ..writeln(
-            '@矩形=${bubble.x.toStringAsFixed(0)},${bubble.y.toStringAsFixed(0)},${bubble.width.toStringAsFixed(0)},${bubble.height.toStringAsFixed(0)}',
-          )
-          ..writeln('@尾巴=${_tailName(bubble.tailDirection)}')
-          ..writeln('@气泡=${_shapeName(bubble.shape)}')
-          ..writeln('@字体=${bubble.fontFamily}')
-          ..writeln('@字号=${bubble.fontSize.toStringAsFixed(0)}')
-          ..writeln(
-            '@颜色=#${bubble.fontColorValue.toRadixString(16).padLeft(8, '0').substring(2)}',
-          )
-          ..writeln('@行距=${bubble.lineHeight.toStringAsFixed(2)}')
-          ..writeln('@描边=${bubble.strokeWidth.toStringAsFixed(1)}')
-          ..writeln('@白底透明度=${(bubble.fillOpacity * 100).round()}')
-          ..writeln(caption.text)
-          ..writeln();
-      }
-    }
-    return output.toString().trimRight();
-  }
-
-  String _tailName(TailDirection value) => switch (value) {
-        TailDirection.upLeft => '左上',
-        TailDirection.upRight => '右上',
-        TailDirection.downLeft => '左下',
-        TailDirection.downRight => '右下',
-      };
-
-  String _shapeName(BubbleShape value) => switch (value) {
-        BubbleShape.ellipse => '对话气泡',
-        BubbleShape.rounded => '旁白框',
-        BubbleShape.shout => '惊喊气泡',
-        BubbleShape.thought => '心理气泡',
-        BubbleShape.whisper => '耳语气泡',
-      };
-
   Future<void> _pickImages({bool replaceProject = false}) async {
     final replace = replaceProject || _isDemoProject || _pages.isEmpty;
     if (replaceProject && _dirty && _pages.isNotEmpty && !_isDemoProject) {
@@ -681,7 +625,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     });
     unawaited(_loadSelectedPageSource());
     _disposePages(replacedPages);
-    _script.text = _scriptForPages(_pages);
+    _script.text = buildBcsScript(_pages);
     _projectThumbnailBase64 = await encodeThumbnailBase64(_pages.first.image);
     await _persistLocalProject(forceFull: true);
     if (mounted) {
@@ -814,7 +758,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       _selectionVisible = false;
       _markDirty();
     });
-    if (migratedLegacy) _script.text = _scriptForPages(_pages);
+    if (migratedLegacy) _script.text = buildBcsScript(_pages);
     final bubbleCount = _pages.fold<int>(
       0,
       (total, page) => total + page.placements.length,
@@ -1560,7 +1504,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         _pages
           ..clear()
           ..addAll(project.pages);
-        _script.text = _scriptForPages(project.pages);
+        _script.text = buildBcsScript(project.pages);
         _projectThumbnailBase64 = thumbnail;
         _selectedPage = 0;
         _selectedBubble = 0;
@@ -1627,9 +1571,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               label: LText('导入 TXT'),
             ),
             TextButton.icon(
-              onPressed: _exportScriptTemplate,
+              onPressed: _exportCurrentBcsScript,
               icon: const Icon(Icons.download_outlined),
-              label: LText('导出当前模板'),
+              label: LText('导出完整 BCS 字幕'),
             ),
             TextButton.icon(
               onPressed: _showFormatGuide,
@@ -1737,26 +1681,26 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     }
   }
 
-  Future<void> _exportScriptTemplate() async {
+  Future<void> _exportCurrentBcsScript() async {
     if (_pages.isEmpty) return;
     try {
-      final text = _scriptForPages(_pages);
+      final text = buildBcsScript(_pages);
       final path = await saveBinaryFile(
-        title: tr('导出精准字幕模板'),
-        fileName: tr('精准字幕模板.txt'),
+        title: tr('导出完整 BCS 字幕脚本'),
+        fileName: bcsScriptFileName(_projectName),
         bytes: Uint8List.fromList(utf8.encode(text)),
         kind: 'text',
       );
       if (mounted && path != null) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(_quickFeedback('字幕模板已保存：$path'));
+        ).showSnackBar(_quickFeedback('BCS 字幕脚本已保存：$path'));
       }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: LText('模板导出失败：$error')));
+        ).showSnackBar(SnackBar(content: LText('导出失败：$error')));
       }
     }
   }
@@ -1868,7 +1812,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         '${tr('下面的数据由软件直接生成。图片顺序和尺寸是强制约束，不允许 AI 修改或重新排序。', languageCode: language)}\n\n'
         '## ${tr('图片顺序与原图尺寸', languageCode: language)}\n\n$images\n\n'
         '## ${tr('当前项目完整模板', languageCode: language)}\n\n'
-        '```text\n${_scriptForPages(_pages)}\n```\n\n'
+        '```text\n${buildBcsScript(_pages)}\n```\n\n'
         '${tr('请把实际图片、需要加入的对白或旁白，与以上规范和模板一起提供给 AI。AI 必须只返回最终的 BCS 纯文本脚本。', languageCode: language)}';
   }
 
@@ -2096,6 +2040,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               tooltip: tr('更多操作'),
               onSelected: (value) {
                 switch (value) {
+                  case 'exportBcs':
+                    _exportCurrentBcsScript();
                   case 'open':
                     _openProject();
                   case 'help':
@@ -2105,6 +2051,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 }
               },
               itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'exportBcs',
+                  enabled: _pages.isNotEmpty,
+                  child: LText('导出完整 BCS 字幕'),
+                ),
                 PopupMenuItem(value: 'open', child: LText('打开工程')),
                 PopupMenuItem(value: 'help', child: LText('使用指南')),
                 PopupMenuItem(value: 'settings', child: LText('设置')),
@@ -2232,20 +2183,30 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 tooltip: tr('批量导出'),
                 icon: const Icon(Icons.file_download_outlined),
               ),
-            if (!wide)
-              PopupMenuButton<String>(
-                tooltip: tr('更多操作'),
-                onSelected: (value) {
-                  switch (value) {
-                    case 'open':
-                      _openProject();
-                    case 'help':
-                      _showHelp();
-                    case 'settings':
-                      _showSettings();
-                  }
-                },
-                itemBuilder: (context) => [
+            PopupMenuButton<String>(
+              tooltip: tr('更多操作'),
+              onSelected: (value) {
+                switch (value) {
+                  case 'exportBcs':
+                    _exportCurrentBcsScript();
+                  case 'open':
+                    _openProject();
+                  case 'help':
+                    _showHelp();
+                  case 'settings':
+                    _showSettings();
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'exportBcs',
+                  enabled: _pages.isNotEmpty,
+                  child: ListTile(
+                    leading: const Icon(Icons.description_outlined),
+                    title: LText('导出完整 BCS 字幕'),
+                  ),
+                ),
+                if (!wide)
                   PopupMenuItem(
                     value: 'open',
                     child: ListTile(
@@ -2253,6 +2214,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       title: LText('打开工程'),
                     ),
                   ),
+                if (!wide)
                   PopupMenuItem(
                     value: 'help',
                     child: ListTile(
@@ -2260,6 +2222,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       title: LText('使用指南'),
                     ),
                   ),
+                if (!wide)
                   PopupMenuItem(
                     value: 'settings',
                     child: ListTile(
@@ -2267,8 +2230,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       title: LText('设置'),
                     ),
                   ),
-                ],
-              ),
+              ],
+            ),
           ],
         ),
       );
