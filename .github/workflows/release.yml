@@ -157,9 +157,7 @@ jobs:
         run: |
           flutter pub get
           flutter build web --release --no-web-resources-cdn
-          (Get-Content build/web/index.html -Raw).Replace('<base href="/">', '<base href="./">') | Set-Content build/web/index.html -NoNewline
-          New-Item -ItemType Directory -Path desktop-shell/web -Force | Out-Null
-          Copy-Item -Path build/web/* -Destination desktop-shell/web -Recurse -Force
+          .\tools\prepare_desktop_web.ps1
           New-Item -ItemType Directory -Path C:\b -Force | Out-Null
           Copy-Item -Path desktop-shell/* -Destination C:\b -Recurse -Force
       - name: Build Windows Setup and portable app
@@ -178,6 +176,7 @@ jobs:
             }
           }
           pnpm exec electron-builder --win nsis portable --publish never
+          node verify-package.js dist\win-unpacked\resources\app.asar
           New-Item -ItemType Directory -Path $env:GITHUB_WORKSPACE\release-assets -Force | Out-Null
           Copy-Item -Path dist\*.exe,dist\*.blockmap,dist\latest.yml -Destination $env:GITHUB_WORKSPACE\release-assets -Force
       - uses: actions/upload-artifact@v4

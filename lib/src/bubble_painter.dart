@@ -16,60 +16,47 @@ class BubbleTailGeometry {
 }
 
 BubbleTailGeometry bubbleTailGeometry(Rect rect, BubblePlacement bubble) {
-  final length = (rect.shortestSide * .17).clamp(12.0, 30.0);
-  final horizontalHalfBase = (rect.width * .042).clamp(8.0, 18.0);
-  final leftAnchor = rect.left + rect.width * .24;
-  final rightAnchor = rect.right - rect.width * .24;
-  switch (bubble.tailDirection) {
-    case TailDirection.upLeft:
-      return BubbleTailGeometry(
-        start: Offset(
-          leftAnchor - horizontalHalfBase,
-          rect.top + rect.height * .13,
-        ),
-        tip: Offset(leftAnchor - length * .72, rect.top - length * .72),
-        end: Offset(
-          leftAnchor + horizontalHalfBase,
-          rect.top + rect.height * .13,
-        ),
-      );
-    case TailDirection.upRight:
-      return BubbleTailGeometry(
-        start: Offset(
-          rightAnchor - horizontalHalfBase,
-          rect.top + rect.height * .13,
-        ),
-        tip: Offset(rightAnchor + length * .72, rect.top - length * .72),
-        end: Offset(
-          rightAnchor + horizontalHalfBase,
-          rect.top + rect.height * .13,
-        ),
-      );
-    case TailDirection.downLeft:
-      return BubbleTailGeometry(
-        start: Offset(
-          leftAnchor - horizontalHalfBase,
-          rect.bottom - rect.height * .13,
-        ),
-        tip: Offset(leftAnchor - length * .72, rect.bottom + length * .72),
-        end: Offset(
-          leftAnchor + horizontalHalfBase,
-          rect.bottom - rect.height * .13,
-        ),
-      );
-    case TailDirection.downRight:
-      return BubbleTailGeometry(
-        start: Offset(
-          rightAnchor - horizontalHalfBase,
-          rect.bottom - rect.height * .13,
-        ),
-        tip: Offset(rightAnchor + length * .72, rect.bottom + length * .72),
-        end: Offset(
-          rightAnchor + horizontalHalfBase,
-          rect.bottom - rect.height * .13,
-        ),
-      );
-  }
+  final shortest = math.max(1.0, rect.shortestSide);
+  // Measure the visible part from the bubble boundary instead of scaling an
+  // indirect diagonal vector. This keeps ordinary tails clearly readable
+  // while still making an extremely stretched bubble depend only on its short
+  // side. The visible reach therefore never collapses into a 3-7px nub and
+  // never grows into the long spikes produced by the old long-side formula.
+  final visibleReach = (shortest * .18).clamp(10.0, 24.0);
+  final inset = math.min(
+    rect.height * .42,
+    (shortest * .13).clamp(3.0, 14.0),
+  );
+  final pointsDown = bubble.tailDirection == TailDirection.downLeft ||
+      bubble.tailDirection == TailDirection.downRight;
+  final pointsRight = bubble.tailDirection == TailDirection.upRight ||
+      bubble.tailDirection == TailDirection.downRight;
+  final baseY = pointsDown ? rect.bottom - inset : rect.top + inset;
+  final radiusX = math.max(.5, rect.width / 2);
+  final radiusY = math.max(.5, rect.height / 2);
+  final normalizedY = ((baseY - rect.center.dy) / radiusY).clamp(-1.0, 1.0);
+  final horizontalExtent =
+      radiusX * math.sqrt(math.max(0.0, 1 - normalizedY * normalizedY));
+  final anchorOffset = horizontalExtent * .42;
+  final anchorX = rect.center.dx + (pointsRight ? anchorOffset : -anchorOffset);
+  final desiredHalfBase = (shortest * .075).clamp(4.0, 11.0);
+  final availableHalfBase = math.max(
+    .6,
+    horizontalExtent - anchorOffset - shortest * .01,
+  );
+  final horizontalHalfBase = math.min(desiredHalfBase, availableHalfBase);
+
+  // Keep both base points inside the body's horizontal chord. Using a
+  // percentage of the long side made a tiny tail become a deep slit whenever
+  // a bubble was stretched to an extreme aspect ratio.
+  return BubbleTailGeometry(
+    start: Offset(anchorX - horizontalHalfBase, baseY),
+    tip: Offset(
+      anchorX + (pointsRight ? visibleReach * .68 : -visibleReach * .68),
+      pointsDown ? rect.bottom + visibleReach : rect.top - visibleReach,
+    ),
+    end: Offset(anchorX + horizontalHalfBase, baseY),
+  );
 }
 
 List<Offset> bubbleResizeHandles(Rect rect) => [
@@ -305,6 +292,16 @@ Path _bubbleShapePath(Rect rect, BubbleShape shape) {
   }
 }
 
+Path bubbleOutlinePath(Rect rect, BubblePlacement bubble) {
+  final body = _bubbleShapePath(rect, bubble.shape);
+  if (bubble.shape != BubbleShape.ellipse &&
+      bubble.shape != BubbleShape.whisper) {
+    return body;
+  }
+  final tail = _bubbleTailPath(bubbleTailGeometry(rect, bubble));
+  return Path.combine(PathOperation.union, body, tail);
+}
+
 bool bubbleContainsPoint(BubblePlacement bubble, Offset point) {
   final rect = Rect.fromLTWH(
     bubble.x,
@@ -312,14 +309,12 @@ bool bubbleContainsPoint(BubblePlacement bubble, Offset point) {
     bubble.width,
     bubble.height,
   );
-  final shapePath = _bubbleShapePath(rect, bubble.shape);
+  final shapePath = bubbleOutlinePath(rect, bubble);
   if (shapePath.contains(point)) return true;
   if (!bubbleHasPointer(bubble.shape)) return false;
 
   final tail = bubbleTailGeometry(rect, bubble);
-  if (bubble.shape != BubbleShape.thought) {
-    return _bubbleTailPath(tail).contains(point);
-  }
+  if (bubble.shape != BubbleShape.thought) return false;
 
   for (final circle in _thoughtTailCircles(rect, tail)) {
     if ((point - circle.center).distance <= circle.radius) return true;
@@ -431,8 +426,7 @@ class PagePainter extends CustomPainter {
       }
     } else if (bubble.shape == BubbleShape.ellipse ||
         bubble.shape == BubbleShape.whisper) {
-      final tailPath = _bubbleTailPath(tail);
-      final combined = Path.combine(PathOperation.union, shapePath, tailPath);
+      final combined = bubbleOutlinePath(rect, bubble);
       canvas.drawPath(combined, fill);
       if (bubble.shape == BubbleShape.whisper) {
         _drawDashedPath(canvas, combined, stroke, dash: 8 * sx, gap: 6 * sx);

@@ -547,12 +547,58 @@ void main() {
       page
         ..captions = []
         ..placements = [];
-      final script = applyProjectEdits(edits, [page]);
-      expect(script, 'small script');
+      final result = applyProjectEdits(edits, [page]);
+      expect(result.script, 'small script');
+      expect(result.preservedManifestPages, 0);
       expect(page.captions.single.text, '修改后的文字');
       expect(page.placements.single.shape, BubbleShape.whisper);
     },
   );
+
+  test('legacy empty edit pages cannot erase manifest bubbles', () async {
+    final png = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    );
+    final codec = await ui.instantiateImageCodec(png);
+    final frame = await codec.getNextFrame();
+    final page = ImagePage(
+      name: '001.png',
+      bytes: Uint8List.fromList(png),
+      image: frame.image,
+      pageId: 'page-one',
+    );
+    const caption = CaptionLine(text: '主清单仍有的字幕', speaker: '');
+    page
+      ..captions = const [caption]
+      ..placements = const [
+        BubblePlacement(
+          caption: caption,
+          x: 12,
+          y: 18,
+          width: 240,
+          height: 120,
+        ),
+      ];
+    final legacy = utf8.encode(jsonEncode({
+      'format': 'bubble-caption-studio-edits',
+      'schemaVersion': 1,
+      'script': 'stale empty script',
+      'pages': [
+        {
+          'pageId': 'page-one',
+          'approved': false,
+          'captions': <Object?>[],
+          'placements': <Object?>[],
+        },
+      ],
+    }));
+
+    final result = applyProjectEdits(Uint8List.fromList(legacy), [page]);
+    expect(result.recoveredLegacyData, isTrue);
+    expect(page.captions.single.text, '主清单仍有的字幕');
+    expect(page.placements, hasLength(1));
+    page.dispose();
+  });
 
   test(
     'project order uses order rank and permits duplicate file names',
@@ -856,6 +902,84 @@ void main() {
       bubbleTailGeometry(rect, fixedLeft).tip,
       bubbleTailGeometry(rect, fixedRight).tip,
     );
+  });
+
+  test('dialogue tails stay visible and connected at extreme aspect ratios',
+      () {
+    const caption = CaptionLine(speaker: '', text: '极端比例');
+    const rects = [
+      ui.Rect.fromLTWH(10, 20, 60, 660),
+      ui.Rect.fromLTWH(10, 20, 660, 60),
+    ];
+    for (final rect in rects) {
+      for (final direction in TailDirection.values) {
+        final bubble = BubblePlacement(
+          caption: caption,
+          x: rect.left,
+          y: rect.top,
+          width: rect.width,
+          height: rect.height,
+          tailDirection: direction,
+        );
+        final tail = bubbleTailGeometry(rect, bubble);
+        final outline = bubbleOutlinePath(rect, bubble);
+        final base = Offset.lerp(tail.start, tail.end, .5)!;
+        final seamDistance = (tail.tip - base).distance;
+        final visibleReach = direction == TailDirection.downLeft ||
+                direction == TailDirection.downRight
+            ? tail.tip.dy - rect.bottom
+            : rect.top - tail.tip.dy;
+
+        expect(rect.contains(tail.start), isTrue);
+        expect(rect.contains(tail.end), isTrue);
+        expect(visibleReach, inInclusiveRange(10.0, 24.0));
+        expect(seamDistance, lessThanOrEqualTo(rect.shortestSide * .5));
+        expect(bubbleContainsPoint(bubble, base), isTrue);
+        expect(
+          bubbleContainsPoint(bubble, Offset.lerp(base, tail.tip, .5)!),
+          isTrue,
+        );
+        expect(outline.computeMetrics().length, 1);
+      }
+    }
+  });
+
+  test('unified outline does not stroke an interior tail seam', () async {
+    const caption = CaptionLine(speaker: '', text: '无接缝');
+    const rect = ui.Rect.fromLTWH(30, 20, 60, 660);
+    const bubble = BubblePlacement(
+      caption: caption,
+      x: 30,
+      y: 20,
+      width: 60,
+      height: 660,
+      tailDirection: TailDirection.downRight,
+    );
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final outline = bubbleOutlinePath(rect, bubble);
+    canvas.drawPath(outline, Paint()..color = Colors.white);
+    canvas.drawPath(
+      outline,
+      Paint()
+        ..color = Colors.black
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3,
+    );
+    final image = await recorder.endRecording().toImage(140, 720);
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final tail = bubbleTailGeometry(rect, bubble);
+    final base = Offset.lerp(tail.start, tail.end, .5)!;
+    final sampleX = base.dx.round();
+    final sampleY = (base.dy - 2).round();
+    final offset = (sampleY * image.width + sampleX) * 4;
+
+    expect(bytes, isNotNull);
+    expect(bytes!.getUint8(offset), greaterThan(220));
+    expect(bytes.getUint8(offset + 1), greaterThan(220));
+    expect(bytes.getUint8(offset + 2), greaterThan(220));
+    expect(bytes.getUint8(offset + 3), 255);
+    image.dispose();
   });
 
   test('preset positions and invalid values are reported safely', () {

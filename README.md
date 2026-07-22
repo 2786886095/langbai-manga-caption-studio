@@ -137,8 +137,7 @@ flutter pub get
 flutter analyze
 flutter test
 flutter build web --release --no-web-resources-cdn
-(Get-Content build/web/index.html -Raw).Replace('<base href="/">', '<base href="./">') | Set-Content build/web/index.html -NoNewline
-Copy-Item -Path build/web/* -Destination desktop-shell/web -Recurse -Force
+.\tools\prepare_desktop_web.ps1
 cd desktop-shell
 pnpm install
 pnpm run dist

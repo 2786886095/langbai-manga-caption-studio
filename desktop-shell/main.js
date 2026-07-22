@@ -94,20 +94,23 @@ async function projectDirectory() {
 }
 
 async function readProjectCatalog() {
-  try {
-    const directory = await projectDirectory();
-    return JSON.parse(await fs.readFile(path.join(directory, 'catalog.json'), 'utf8'));
-  } catch {
-    return [];
+  const directory = await projectDirectory();
+  const catalogPath = path.join(directory, 'catalog.json');
+  for (const candidate of [catalogPath, `${catalogPath}.bak`]) {
+    try {
+      return JSON.parse(await fs.readFile(candidate, 'utf8'));
+    } catch {
+      // Try the previous complete generation before returning an empty hub.
+    }
   }
+  return [];
 }
 
 async function writeProjectCatalog(projects) {
   const directory = await projectDirectory();
-  await fs.writeFile(
+  await atomicWriteWithBackup(
     path.join(directory, 'catalog.json'),
-    JSON.stringify(projects, null, 2),
-    'utf8',
+    Buffer.from(JSON.stringify(projects, null, 2), 'utf8'),
   );
 }
 
@@ -196,6 +199,35 @@ app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors');
 function requestBuffer(request) {
   if (request && request.bytes) return Buffer.from(request.bytes);
   return Buffer.from(request.base64 || '', 'base64');
+}
+
+async function atomicWriteWithBackup(filePath, bytes) {
+  const temporaryPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  await fs.writeFile(temporaryPath, bytes);
+  try {
+    try {
+      await fs.copyFile(filePath, `${filePath}.bak`);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+    await fs.rename(temporaryPath, filePath);
+  } catch (error) {
+    await fs.rm(temporaryPath, { force: true });
+    throw error;
+  }
+}
+
+async function readJsonArtifact(filePath, expectedFormat) {
+  for (const candidate of [filePath, `${filePath}.bak`]) {
+    try {
+      const bytes = await fs.readFile(candidate);
+      const parsed = JSON.parse(bytes.toString('utf8'));
+      if (parsed && parsed.format === expectedFormat) return bytes;
+    } catch {
+      // Fall through to the previous complete generation.
+    }
+  }
+  return null;
 }
 
 function storageName(value) {
@@ -309,25 +341,25 @@ ipcMain.handle('desktop:create-project', async (_event, request) => {
 });
 
 ipcMain.handle('desktop:load-project-data', async (_event, request) => {
-  try {
-    const directory = await projectDirectory();
-    const bytes = await fs.readFile(path.join(directory, `${request.id}.bcs.json`));
-    return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  } catch {
-    return null;
-  }
+  const directory = await projectDirectory();
+  const bytes = await readJsonArtifact(
+    path.join(directory, `${request.id}.bcs.json`),
+    'bubble-caption-studio',
+  );
+  return bytes == null
+    ? null
+    : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 });
 
 ipcMain.handle('desktop:load-project-manifest', async (_event, request) => {
-  try {
-    const directory = await projectDirectory();
-    const bytes = await fs.readFile(
-      path.join(directory, storageName(request.id), 'manifest.json'),
-    );
-    return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  } catch {
-    return null;
-  }
+  const directory = await projectDirectory();
+  const bytes = await readJsonArtifact(
+    path.join(directory, storageName(request.id), 'manifest.json'),
+    'bubble-caption-studio-manifest',
+  );
+  return bytes == null
+    ? null
+    : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 });
 
 ipcMain.handle('desktop:load-project-image', async (_event, request) => {
@@ -358,7 +390,10 @@ ipcMain.handle('desktop:save-project-manifest', async (_event, request) => {
   const directory = await projectDirectory();
   const projectPath = path.join(directory, storageName(request.id));
   await fs.mkdir(projectPath, { recursive: true });
-  await fs.writeFile(path.join(projectPath, 'manifest.json'), requestBuffer(request));
+  await atomicWriteWithBackup(
+    path.join(projectPath, 'manifest.json'),
+    requestBuffer(request),
+  );
   // A successful manifest write completes legacy migration; remove the huge packed copy.
   await fs.rm(path.join(directory, `${request.id}.bcs.json`), { force: true });
   const catalog = await readProjectCatalog();
@@ -379,7 +414,7 @@ ipcMain.handle('desktop:save-project-manifest', async (_event, request) => {
 
 ipcMain.handle('desktop:save-project-data', async (_event, request) => {
   const directory = await projectDirectory();
-  await fs.writeFile(
+  await atomicWriteWithBackup(
     path.join(directory, `${request.id}.bcs.json`),
     requestBuffer(request),
   );
@@ -400,18 +435,19 @@ ipcMain.handle('desktop:save-project-data', async (_event, request) => {
 });
 
 ipcMain.handle('desktop:load-project-edits', async (_event, request) => {
-  try {
-    const directory = await projectDirectory();
-    const bytes = await fs.readFile(path.join(directory, `${request.id}.edits.json`));
-    return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  } catch {
-    return null;
-  }
+  const directory = await projectDirectory();
+  const bytes = await readJsonArtifact(
+    path.join(directory, `${request.id}.edits.json`),
+    'bubble-caption-studio-edits',
+  );
+  return bytes == null
+    ? null
+    : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 });
 
 ipcMain.handle('desktop:save-project-edits', async (_event, request) => {
   const directory = await projectDirectory();
-  await fs.writeFile(
+  await atomicWriteWithBackup(
     path.join(directory, `${request.id}.edits.json`),
     requestBuffer(request),
   );
@@ -434,7 +470,9 @@ ipcMain.handle('desktop:save-project-edits', async (_event, request) => {
 ipcMain.handle('desktop:delete-project', async (_event, request) => {
   const directory = await projectDirectory();
   await fs.rm(path.join(directory, `${request.id}.bcs.json`), { force: true });
+  await fs.rm(path.join(directory, `${request.id}.bcs.json.bak`), { force: true });
   await fs.rm(path.join(directory, `${request.id}.edits.json`), { force: true });
+  await fs.rm(path.join(directory, `${request.id}.edits.json.bak`), { force: true });
   await fs.rm(path.join(directory, storageName(request.id)), { recursive: true, force: true });
   await writeProjectCatalog(
     (await readProjectCatalog()).filter((project) => project.id !== request.id),

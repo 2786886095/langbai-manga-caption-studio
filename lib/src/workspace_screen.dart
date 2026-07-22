@@ -405,9 +405,14 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           : await encodeThumbnailBase64(project.pages.first.image);
       final edits = await loadLocalProjectEdits(widget.projectId);
       String? editedScript;
+      var recoveredLegacyPages = 0;
       if (edits != null) {
         try {
-          editedScript = applyProjectEdits(edits, project.pages);
+          final result = applyProjectEdits(edits, project.pages);
+          recoveredLegacyPages = result.preservedManifestPages;
+          editedScript = result.recoveredLegacyData
+              ? buildBcsScript(project.pages)
+              : result.script;
         } catch (_) {
           // The full project remains usable even if an optional edit layer fails.
         }
@@ -433,18 +438,22 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         _selectedBubble = 0;
         _selectionVisible = false;
         _processing = false;
-        _dirty = needsMigration;
+        _dirty = needsMigration || recoveredLegacyPages > 0;
         _editRevision = 0;
         _structureDirty = needsMigration;
       });
       unawaited(_loadSelectedPageSource());
-      await saveLocalProjectEdits(
-        widget.projectId,
-        widget.projectName,
-        encodeProjectEdits(project.pages, _script.text),
-        thumbnailBase64: thumbnail,
-      );
+      // Opening a project is read-only. In particular, never rewrite the edit
+      // layer during load: doing so used to make a stale/empty overlay
+      // permanently erase recoverable manifest bubbles.
       if (needsMigration) await _persistLocalProject(forceFull: true);
+      if (mounted && recoveredLegacyPages > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          _quickFeedback(
+            '已从项目主数据恢复 $recoveredLegacyPages 页气泡；请点击保存确认恢复结果。',
+          ),
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _processing = false);
