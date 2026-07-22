@@ -653,6 +653,15 @@ final _dynamicPatterns = <_TranslationPattern>[
     },
   ),
   _TranslationPattern(
+    RegExp(r'^BCS 字幕脚本已保存：(.+)$'),
+    const {
+      'en': 'BCS caption script saved: {1}',
+      'ja': 'BCS 字幕スクリプトを保存しました：{1}',
+      'ko': 'BCS 자막 스크립트 저장됨: {1}',
+      'zh_TW': 'BCS 字幕腳本已儲存：{1}',
+    },
+  ),
+  _TranslationPattern(
     RegExp(r'^(保存工程失败|导出失败|字幕文件读取失败|模板导出失败)：(.+)$'),
     const {
       'en': '{1}: {2}',
@@ -1752,6 +1761,18 @@ const _workspaceTranslations = <String, Map<String, String>>{
     'ja': '精密字幕テンプレートを書き出す',
     'ko': '정밀 자막 템플릿 내보내기',
     'zh_TW': '匯出精準字幕範本',
+  },
+  '导出完整 BCS 字幕': {
+    'en': 'Export complete BCS captions',
+    'ja': '完全な BCS 字幕を書き出す',
+    'ko': '전체 BCS 자막 내보내기',
+    'zh_TW': '匯出完整 BCS 字幕',
+  },
+  '导出完整 BCS 字幕脚本': {
+    'en': 'Export complete BCS caption script',
+    'ja': '完全な BCS 字幕スクリプトを書き出す',
+    'ko': '전체 BCS 자막 스크립트 내보내기',
+    'zh_TW': '匯出完整 BCS 字幕腳本',
   },
   '精准字幕模板.txt': {
     'en': 'precise-caption-template.txt',

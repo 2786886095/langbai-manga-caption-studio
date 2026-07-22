@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:bubble_caption_studio/src/app.dart';
 import 'package:bubble_caption_studio/src/app_localization.dart';
 import 'package:bubble_caption_studio/src/app_settings.dart';
+import 'package:bubble_caption_studio/src/bcs_script_exporter.dart';
 import 'package:bubble_caption_studio/src/bubble_painter.dart';
 import 'package:bubble_caption_studio/src/file_gateway.dart';
 import 'package:bubble_caption_studio/src/layout_engine.dart';
@@ -59,6 +60,69 @@ void main() {
       ),
       const Size(760, 200),
     );
+  });
+
+  test('complete BCS export preserves every page and current bubble style',
+      () async {
+    final png = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    );
+    final codec = await ui.instantiateImageCodec(png);
+    final frame = await codec.getNextFrame();
+    final first = ImagePage(
+      name: '001.png',
+      bytes: Uint8List.fromList(png),
+      image: frame.image,
+      originalWidth: 832,
+      originalHeight: 1216,
+    );
+    final second = ImagePage(
+      name: '002.png',
+      bytes: Uint8List.fromList(png),
+      image: frame.image,
+      originalWidth: 1024,
+      originalHeight: 1024,
+    );
+    const caption = CaptionLine(
+      speaker: '',
+      text: '这是当前气泡字幕。',
+      bubbleId: 'p1-b1',
+    );
+    first
+      ..captions = const [caption]
+      ..placements = const [
+        BubblePlacement(
+          caption: caption,
+          x: 45,
+          y: 156,
+          width: 250,
+          height: 195,
+          shape: BubbleShape.thought,
+          tailDirection: TailDirection.downLeft,
+          fontFamily: 'Ma Shan Zheng',
+          fontColorValue: 0xff2f78d6,
+          fontSize: 36,
+          lineHeight: 1.3,
+          strokeWidth: 2,
+          fillOpacity: .72,
+        ),
+      ];
+
+    final script = buildBcsScript([first, second]);
+
+    expect(script, startsWith('@格式=BCS顺序字幕脚本\n@版本=2\n'));
+    expect(script, contains('[图片 1]\n@原文件名=001.png'));
+    expect(script, contains('@原图尺寸=832x1216'));
+    expect(script, contains('@矩形=45,156,250,195'));
+    expect(script, contains('@尾巴=左下'));
+    expect(script, contains('@气泡=心理气泡'));
+    expect(script, contains('@字体=Ma Shan Zheng'));
+    expect(script, contains('@颜色=#2F78D6'));
+    expect(script, contains('@白底透明度=72'));
+    expect(script, contains('[图片 2]\n@原文件名=002.png'));
+    expect(script, endsWith('@原图尺寸=1024x1024\n'));
+    expect(parseCaptionScript(script).sections, hasLength(2));
+    expect(bcsScriptFileName('第01话:初遇?'), '第01话_初遇_-BCS字幕脚本.txt');
   });
 
   testWidgets('editable text exposes the Chinese right-click menu', (
@@ -232,6 +296,22 @@ void main() {
     expect(
       tr('批量导出', languageCode: 'ko'),
       '일괄 내보내기',
+    );
+    expect(
+      tr('导出完整 BCS 字幕', languageCode: 'en'),
+      'Export complete BCS captions',
+    );
+    expect(
+      tr('导出完整 BCS 字幕', languageCode: 'ja'),
+      '完全な BCS 字幕を書き出す',
+    );
+    expect(
+      tr('导出完整 BCS 字幕', languageCode: 'ko'),
+      '전체 BCS 자막 내보내기',
+    );
+    expect(
+      tr('导出完整 BCS 字幕', languageCode: 'zh_TW'),
+      '匯出完整 BCS 字幕',
     );
   });
 
