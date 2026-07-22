@@ -7,6 +7,7 @@ import 'package:bubble_caption_studio/src/app_localization.dart';
 import 'package:bubble_caption_studio/src/app_settings.dart';
 import 'package:bubble_caption_studio/src/bcs_script_exporter.dart';
 import 'package:bubble_caption_studio/src/bubble_painter.dart';
+import 'package:bubble_caption_studio/src/bubble_text_editor.dart';
 import 'package:bubble_caption_studio/src/file_gateway.dart';
 import 'package:bubble_caption_studio/src/layout_engine.dart';
 import 'package:bubble_caption_studio/src/models.dart';
@@ -160,6 +161,41 @@ void main() {
     expect(find.text('复制'), findsOneWidget);
     expect(find.text('粘贴'), findsOneWidget);
     expect(find.text('全选'), findsOneWidget);
+  });
+
+  testWidgets('bubble text keeps focus across live preview rebuilds', (
+    tester,
+  ) async {
+    var text = '';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) => Scaffold(
+            body: BubbleTextEditor(
+              editorId: 'page-1-bubble-1',
+              text: text,
+              compact: false,
+              onChanged: (value) => setState(() => text = value),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byType(TextFormField);
+    await tester.tap(field);
+    await tester.enterText(field, '第一次输入');
+    await tester.pump();
+
+    expect(text, '第一次输入');
+    expect(FocusManager.instance.primaryFocus?.hasFocus, isTrue);
+
+    tester.testTextInput.enterText('第一次输入后继续');
+    await tester.pump();
+
+    expect(text, '第一次输入后继续');
+    expect(FocusManager.instance.primaryFocus?.hasFocus, isTrue);
+    expect(find.text('第一次输入后继续'), findsOneWidget);
   });
 
   test('settings preserve export preferences and ignore legacy autosave', () {

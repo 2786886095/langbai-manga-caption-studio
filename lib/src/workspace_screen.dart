@@ -12,6 +12,7 @@ import 'app_settings.dart';
 import 'app_localization.dart';
 import 'bcs_script_exporter.dart';
 import 'bubble_painter.dart';
+import 'bubble_text_editor.dart';
 import 'exporter.dart';
 import 'file_gateway.dart';
 import 'layout_engine.dart';
@@ -3619,15 +3620,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               ),
               const SizedBox(height: 7),
             ],
-            TextFormField(
+            BubbleTextEditor(
               key: ValueKey(
-                '${page.name}-$_selectedBubble-${bubble.caption.text}',
+                '${page.pageId}-${bubble.caption.bubbleId}',
               ),
-              initialValue: bubble.caption.text,
-              minLines: compact ? 1 : 3,
-              maxLines: compact ? 2 : 5,
-              maxLength: 200,
-              contextMenuBuilder: buildAppTextContextMenu,
+              editorId: '${page.pageId}-${bubble.caption.bubbleId}',
+              text: bubble.caption.text,
+              compact: compact,
               onTap: _remember,
               onChanged: (value) => _replaceBubble(
                 bubble.copyWith(caption: bubble.caption.copyWith(text: value)),
