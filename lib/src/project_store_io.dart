@@ -21,7 +21,7 @@ Future<Directory> _incrementalDirectory(String id) async {
 Future<Uint8List?> loadLocalProjectManifest(String id) async {
   final directory = await _incrementalDirectory(id);
   final file = File('${directory.path}${Platform.pathSeparator}manifest.json');
-  return await file.exists() ? file.readAsBytes() : null;
+  return _readJsonArtifact(file, 'bubble-caption-studio-manifest');
 }
 
 Future<Uint8List> loadLocalProjectImage(String id, String pageId) async {
@@ -54,9 +54,11 @@ Future<void> saveLocalProjectManifest(
 }) async {
   final directory = await _incrementalDirectory(id);
   await directory.create(recursive: true);
-  await File(
-    '${directory.path}${Platform.pathSeparator}manifest.json',
-  ).writeAsBytes(bytes, flush: true);
+  await _atomicWriteBytes(
+      File(
+        '${directory.path}${Platform.pathSeparator}manifest.json',
+      ),
+      bytes);
   final legacy = File(
     '${(await _projectDirectory()).path}${Platform.pathSeparator}$id.bcs.json',
   );
@@ -89,8 +91,17 @@ Future<File> _catalogFile() async => File(
 
 Future<List<LocalProjectSummary>> listLocalProjects() async {
   final file = await _catalogFile();
-  if (!await file.exists()) return const [];
-  final decoded = jsonDecode(await file.readAsString());
+  Object? decoded;
+  for (final candidate in [file, File('${file.path}.bak')]) {
+    try {
+      if (await candidate.exists()) {
+        decoded = jsonDecode(await candidate.readAsString());
+        if (decoded is List) break;
+      }
+    } catch (_) {
+      // Try the previous complete catalog generation.
+    }
+  }
   if (decoded is! List) return const [];
   final projects = [
     for (final item in decoded.whereType<Map<String, dynamic>>())
@@ -102,12 +113,51 @@ Future<List<LocalProjectSummary>> listLocalProjects() async {
 
 Future<void> _writeCatalog(List<LocalProjectSummary> projects) async {
   final file = await _catalogFile();
-  await file.writeAsString(
-    const JsonEncoder.withIndent(
-      ' ',
-    ).convert(projects.map((project) => project.toJson()).toList()),
-    flush: true,
+  await _atomicWriteBytes(
+    file,
+    Uint8List.fromList(
+      utf8.encode(
+        const JsonEncoder.withIndent(
+          ' ',
+        ).convert(projects.map((project) => project.toJson()).toList()),
+      ),
+    ),
   );
+}
+
+Future<void> _atomicWriteBytes(File file, Uint8List bytes) async {
+  await file.parent.create(recursive: true);
+  final temporary = File(
+    '${file.path}.tmp-${DateTime.now().microsecondsSinceEpoch}',
+  );
+  await temporary.writeAsBytes(bytes, flush: true);
+  try {
+    if (await file.exists()) {
+      await file.copy('${file.path}.bak');
+      await file.delete();
+    }
+    await temporary.rename(file.path);
+  } catch (_) {
+    if (await temporary.exists()) await temporary.delete();
+    rethrow;
+  }
+}
+
+Future<Uint8List?> _readJsonArtifact(File file, String expectedFormat) async {
+  for (final candidate in [file, File('${file.path}.bak')]) {
+    try {
+      if (!await candidate.exists()) continue;
+      final bytes = await candidate.readAsBytes();
+      final decoded = jsonDecode(utf8.decode(bytes));
+      if (decoded is Map<String, dynamic> &&
+          decoded['format'] == expectedFormat) {
+        return bytes;
+      }
+    } catch (_) {
+      // Try the previous complete generation.
+    }
+  }
+  return null;
 }
 
 Future<LocalProjectSummary> createLocalProject(String name) async {
@@ -126,7 +176,7 @@ Future<Uint8List?> loadLocalProject(String id) async {
   final file = File(
     '${(await _projectDirectory()).path}${Platform.pathSeparator}$id.bcs.json',
   );
-  return await file.exists() ? file.readAsBytes() : null;
+  return _readJsonArtifact(file, 'bubble-caption-studio');
 }
 
 Future<void> saveLocalProject(
@@ -136,9 +186,11 @@ Future<void> saveLocalProject(
   String? thumbnailBase64,
 }) async {
   final directory = await _projectDirectory();
-  await File(
-    '${directory.path}${Platform.pathSeparator}$id.bcs.json',
-  ).writeAsBytes(bytes, flush: true);
+  await _atomicWriteBytes(
+      File(
+        '${directory.path}${Platform.pathSeparator}$id.bcs.json',
+      ),
+      bytes);
   final now = DateTime.now().toUtc();
   final projects = await listLocalProjects();
   final updated = LocalProjectSummary(
@@ -163,7 +215,7 @@ Future<Uint8List?> loadLocalProjectEdits(String id) async {
   final file = File(
     '${(await _projectDirectory()).path}${Platform.pathSeparator}$id.edits.json',
   );
-  return await file.exists() ? file.readAsBytes() : null;
+  return _readJsonArtifact(file, 'bubble-caption-studio-edits');
 }
 
 Future<void> saveLocalProjectEdits(
@@ -173,9 +225,11 @@ Future<void> saveLocalProjectEdits(
   String? thumbnailBase64,
 }) async {
   final directory = await _projectDirectory();
-  await File(
-    '${directory.path}${Platform.pathSeparator}$id.edits.json',
-  ).writeAsBytes(bytes, flush: true);
+  await _atomicWriteBytes(
+      File(
+        '${directory.path}${Platform.pathSeparator}$id.edits.json',
+      ),
+      bytes);
   final now = DateTime.now().toUtc();
   final projects = await listLocalProjects();
   final previous = projects.where((project) => project.id == id).firstOrNull;
@@ -197,10 +251,14 @@ Future<void> deleteLocalProject(String id) async {
     '${(await _projectDirectory()).path}${Platform.pathSeparator}$id.bcs.json',
   );
   if (await file.exists()) await file.delete();
+  final fileBackup = File('${file.path}.bak');
+  if (await fileBackup.exists()) await fileBackup.delete();
   final edits = File(
     '${(await _projectDirectory()).path}${Platform.pathSeparator}$id.edits.json',
   );
   if (await edits.exists()) await edits.delete();
+  final editsBackup = File('${edits.path}.bak');
+  if (await editsBackup.exists()) await editsBackup.delete();
   final incremental = await _incrementalDirectory(id);
   if (await incremental.exists()) await incremental.delete(recursive: true);
   await _writeCatalog([

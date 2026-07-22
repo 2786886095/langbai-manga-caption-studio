@@ -68,7 +68,10 @@ Uint8List _encodeProjectDocument(
 Uint8List encodeProjectEdits(List<ImagePage> pages, String script) {
   final json = <String, Object?>{
     'format': 'bubble-caption-studio-edits',
-    'schemaVersion': 1,
+    // Version 2 makes an intentionally empty page authoritative. Version 1
+    // did not record that intent, so an old/stale empty edit page must never
+    // erase bubbles that are still present in the project manifest.
+    'schemaVersion': 2,
     'savedAt': DateTime.now().toUtc().toIso8601String(),
     'script': script,
     'pages': [for (final page in pages) _encodeEditablePage(page)],
@@ -134,14 +137,33 @@ Map<String, Object?> _encodePage(
       ],
     };
 
-String applyProjectEdits(Uint8List bytes, List<ImagePage> pages) {
+class ProjectEditApplyResult {
+  const ProjectEditApplyResult({
+    required this.script,
+    required this.preservedManifestPages,
+  });
+
+  final String script;
+  final int preservedManifestPages;
+
+  bool get recoveredLegacyData => preservedManifestPages > 0;
+}
+
+ProjectEditApplyResult applyProjectEdits(
+  Uint8List bytes,
+  List<ImagePage> pages,
+) {
   final root = jsonDecode(utf8.decode(bytes));
+  final schemaVersion = root is Map<String, dynamic>
+      ? (root['schemaVersion'] as num?)?.toInt()
+      : null;
   if (root is! Map<String, dynamic> ||
       root['format'] != 'bubble-caption-studio-edits' ||
-      root['schemaVersion'] != 1) {
+      (schemaVersion != 1 && schemaVersion != 2)) {
     throw const FormatException('Unsupported project edit data');
   }
   final byId = {for (final page in pages) page.pageId: page};
+  var preservedManifestPages = 0;
   for (final raw in (root['pages'] as List? ?? const [])) {
     if (raw is! Map<String, dynamic>) continue;
     final page = byId[raw['pageId']?.toString()];
@@ -157,6 +179,13 @@ String applyProjectEdits(Uint8List bytes, List<ImagePage> pages) {
     ];
     final rawPlacements = raw['placements'] as List? ?? const [];
     if (captions.length != rawPlacements.length) continue;
+    if (schemaVersion == 1 && captions.isEmpty && page.captions.isNotEmpty) {
+      // Legacy edit layers were frequently created before the manifest was
+      // saved and could therefore contain an accidental empty page. Preserve
+      // the richer manifest page instead of treating that absence as a delete.
+      preservedManifestPages++;
+      continue;
+    }
     final placements = <BubblePlacement>[];
     for (var i = 0; i < captions.length; i++) {
       final item = rawPlacements[i];
@@ -169,7 +198,10 @@ String applyProjectEdits(Uint8List bytes, List<ImagePage> pages) {
       ..placements = placements
       ..approved = raw['approved'] == true;
   }
-  return root['script']?.toString() ?? '';
+  return ProjectEditApplyResult(
+    script: root['script']?.toString() ?? '',
+    preservedManifestPages: preservedManifestPages,
+  );
 }
 
 BubblePlacement _decodePlacement(
