@@ -1,62 +1,11 @@
 # Design QA
 
-## 2026-07-23 modern-print bubble presets and narration frame
+## 2026-07-23 preset rollback with square narration retained
 
-- Source visual truth: `C:\Users\浪白\.codex\generated_images\019f6de0-8c06-7cb3-a5be-69bd06a3a392\call_xMQTJiZhYCkgqiRuE4dX9rkT.png`
-- Implementation screenshot: `F:\AI\agent\codex\bubble-caption-studio\design-qa\implementation-modern-print-presets.png`
-- Combined comparison: `F:\AI\agent\codex\bubble-caption-studio\design-qa\comparison-modern-print-presets.png`
-- Source pixels: 1487 × 1058
-- Implementation pixels and CSS viewport: 1200 × 760 at device-pixel ratio 1
-- State: narration preset category selected, preset catalog visible, square-corner narration frame rendered
-
-### Full-view comparison evidence
-
-The combined comparison was opened and inspected. The production implementation preserves the existing solid pink, warm-paper application shell and places the preset catalog in the existing bubble inspector rather than replacing the mature workspace with the concept image's sample chapter. The concept artwork is intentionally not copied into the product; real projects continue to render each user's original image.
-
-### Focused region comparison evidence
-
-- The narration sample uses a white fill, exact 90-degree corners, a solid black 2 px outline, no tail, no shadow, no gradient, and no colored side rule.
-- The inspector exposes five category controls and five narration presets at once. Standard, compact, banner, strip, and vertical proportions are visibly distinguishable before selection.
-- The same production catalog component is used by the workspace. Interaction tests switch to the narration category and dispatch the selected preset.
-
-### Required fidelity surfaces
-
-- Fonts and typography: production controls use the bundled Noto Sans SC family, compact 10–13 px preset labels, and the existing application hierarchy. Labels remain legible at the 370 px inspector width.
-- Spacing and layout rhythm: category controls, 6 px preset gaps, 58 px preset cards, and the existing 18 px inspector padding fit without horizontal overflow. The catalog remains horizontally scrollable on narrower phone layouts.
-- Colors and visual tokens: existing `#E94D72` active state, warm-white surfaces, `#D8D0CD` separators, and pure black narration outline are used. No gradients were introduced.
-- Image quality and asset fidelity: production bubble thumbnails are rendered from the same bubble geometry code as the canvas rather than approximate icons. User source images remain unchanged.
-- Copy and content: the inspector states `旁白框 · 纯黑直角框，无尾巴`; preset and category labels are translated for English, Japanese, Korean, Simplified Chinese, and Traditional Chinese.
-
-### Comparison history
-
-#### Pass 1 — blocked
-
-- P1: the earlier narration concept retained a pink side rule and rounded frame, contradicting the selected pure-black square-corner direction.
-- P2: the product exposed only five base bubble types, with no reusable proportion presets.
-
-Fixes made:
-
-- Replaced the narration body path with a true rectangle, white fill, and pure black outline.
-- Added 21 non-destructive presets across dialogue, narration, thought, whisper, and shout categories.
-- Presets modify geometry, bubble type, and outline width while preserving caption text, font, font color, font size, line spacing, opacity, and tail direction.
-
-#### Pass 2 — passed
-
-- The colored side rule is absent and all four narration corners are square.
-- Preset proportions are visually distinct, selectable, kept inside original-image bounds, and do not change the BCS five-type data contract.
-- No actionable P0, P1, or P2 findings remain.
-
-### Verification
-
-- `flutter analyze`: passed with no issues.
-- `flutter test`: 42 passed, 1 existing skip.
-- Flutter web release build: passed.
-- Electron Windows unpacked package: built and remained alive through an isolated eight-second startup smoke test.
-- Packaged ASAR verification: relative base, relative CanvasKit, atomic backup, and backup fallback all passed.
-
-### Follow-up polish
-
-- P3: preset thumbnails intentionally omit sample text so shape and proportion remain readable at compact inspector sizes.
+- Removed the category selector and all 21 proportion presets.
+- Restored the original five bubble-type controls in the inspector.
+- Kept the narration body as a white rectangle with a pure black outline, exact 90-degree corners, and no tail.
+- Removed preset-only localization and tests while retaining a dedicated square-corner narration geometry test.
 
 final result: passed
 

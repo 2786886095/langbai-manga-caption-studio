@@ -12,7 +12,6 @@ import 'app_settings.dart';
 import 'app_localization.dart';
 import 'bcs_script_exporter.dart';
 import 'bubble_painter.dart';
-import 'bubble_style_presets.dart';
 import 'bubble_text_editor.dart';
 import 'exporter.dart';
 import 'file_gateway.dart';
@@ -201,7 +200,6 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   String? _loadingSourcePageId;
   int _sourceLoadGeneration = 0;
   int _mobileDestination = 2;
-  BubblePresetCategory _presetCategory = BubblePresetCategory.dialogue;
 
   ImagePage? get _page =>
       _pages.isEmpty ? null : _pages[_selectedPage.clamp(0, _pages.length - 1)];
@@ -945,31 +943,6 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       _markDirty();
     });
     _canvasRevision.value++;
-  }
-
-  void _applyBubblePreset(BubbleStylePreset preset) {
-    final page = _page;
-    final bubble = _bubble;
-    if (page == null || bubble == null) return;
-    _remember(currentPageOnly: true);
-    final updated = preset.applyTo(bubble, page);
-    setState(() {
-      _presetCategory = preset.category;
-      page.placements[_selectedBubble] = updated;
-      page.captions[_selectedBubble] = updated.caption;
-      page.approved = false;
-      _selectionVisible = true;
-      _markDirty();
-    });
-    _canvasRevision.value++;
-    ScaffoldMessenger.of(context).showSnackBar(
-      _quickFeedback(
-        trArgs(
-          '已应用“{preset}”气泡预设',
-          {'preset': tr(preset.label)},
-        ),
-      ),
-    );
   }
 
   void _replaceBubbleDuringDrag(BubblePlacement bubble) {
@@ -3661,25 +3634,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
             ),
             const SizedBox(height: 14),
             LText(
-              '气泡预设',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            BubblePresetCatalog(
-              selectedCategory: _presetCategory,
-              bubble: bubble,
-              imageSize: Size(
-                page.originalWidth.toDouble(),
-                page.originalHeight.toDouble(),
-              ),
-              compact: compact,
-              onCategoryChanged: (category) =>
-                  setState(() => _presetCategory = category),
-              onPresetSelected: _applyBubblePreset,
-            ),
-            const SizedBox(height: 15),
-            LText(
-              '基础类型',
+              '气泡样式',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
@@ -3960,13 +3915,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           side: BorderSide(color: selected ? AppColors.pink : AppColors.line),
         ),
         child: InkWell(
-          onTap: () {
-            setState(() => _presetCategory = _categoryForShape(shape));
-            _replaceBubble(
-              bubble.copyWith(shape: shape),
-              remember: true,
-            );
-          },
+          onTap: () =>
+              _replaceBubble(bubble.copyWith(shape: shape), remember: true),
           borderRadius: BorderRadius.circular(7),
           child: SizedBox(
             height: 52,
@@ -3995,14 +3945,6 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       ),
     );
   }
-
-  BubblePresetCategory _categoryForShape(BubbleShape shape) => switch (shape) {
-        BubbleShape.ellipse => BubblePresetCategory.dialogue,
-        BubbleShape.rounded => BubblePresetCategory.narration,
-        BubbleShape.thought => BubblePresetCategory.thought,
-        BubbleShape.whisper => BubblePresetCategory.whisper,
-        BubbleShape.shout => BubblePresetCategory.shout,
-      };
 
   Widget _sliderRow(
     String label,

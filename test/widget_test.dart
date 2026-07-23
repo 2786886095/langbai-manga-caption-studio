@@ -1044,6 +1044,24 @@ void main() {
     expect(shout.byFile['001.png']!.single.layout!.shape, BubbleShape.shout);
   });
 
+  test('narration bubble keeps a true square-corner rectangle', () {
+    const rect = ui.Rect.fromLTWH(20, 30, 260, 120);
+    const bubble = BubblePlacement(
+      caption: CaptionLine(speaker: '', text: '旁白'),
+      x: 20,
+      y: 30,
+      width: 260,
+      height: 120,
+      shape: BubbleShape.rounded,
+    );
+
+    final path = bubbleOutlinePath(rect, bubble);
+
+    expect(path.contains(const ui.Offset(21, 31)), isTrue);
+    expect(path.contains(const ui.Offset(279, 149)), isTrue);
+    expect(path.contains(const ui.Offset(19, 31)), isFalse);
+  });
+
   test('stretched thought bubbles stay solid in both orientations', () {
     const horizontal = BubblePlacement(
       caption: CaptionLine(speaker: '', text: 'thought'),
