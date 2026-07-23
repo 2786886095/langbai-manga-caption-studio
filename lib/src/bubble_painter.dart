@@ -261,13 +261,7 @@ Path _bubbleShapePath(Rect rect, BubbleShape shape) {
     case BubbleShape.ellipse:
       return Path()..addOval(rect);
     case BubbleShape.rounded:
-      return Path()
-        ..addRRect(
-          RRect.fromRectAndRadius(
-            rect,
-            Radius.circular(rect.shortestSide * .20),
-          ),
-        );
+      return Path()..addRect(rect);
     case BubbleShape.shout:
       final path = Path();
       const points = 16;
@@ -406,13 +400,13 @@ class PagePainter extends CustomPainter {
     bool selected,
     int bubbleIndex,
   ) {
-    final fillColor = bubble.shape == BubbleShape.rounded
-        ? const Color(0xfff5f5f3)
-        : Colors.white;
+    const fillColor = Colors.white;
     final fill = Paint()
       ..color = fillColor.withOpacity(bubble.fillOpacity.clamp(0, 1));
     final stroke = Paint()
-      ..color = const Color(0xff17181b)
+      ..color = bubble.shape == BubbleShape.rounded
+          ? Colors.black
+          : const Color(0xff17181b)
       ..style = PaintingStyle.stroke
       ..strokeWidth = (bubble.strokeWidth * sx).clamp(1.5, 7);
     final shapePath = _bubbleShapePath(rect, bubble.shape);

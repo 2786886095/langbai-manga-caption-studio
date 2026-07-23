@@ -1277,6 +1277,38 @@ const _workspaceTranslations = <String, Map<String, String>>{
     'ko': '말풍선 스타일',
     'zh_TW': '氣泡樣式'
   },
+  '气泡预设': {
+    'en': 'Bubble presets',
+    'ja': '吹き出しプリセット',
+    'ko': '말풍선 프리셋',
+    'zh_TW': '氣泡預設'
+  },
+  '基础类型': {'en': 'Base type', 'ja': '基本タイプ', 'ko': '기본 유형', 'zh_TW': '基礎類型'},
+  '标准': {'en': 'Standard', 'ja': '標準', 'ko': '표준', 'zh_TW': '標準'},
+  '经典': {'en': 'Classic', 'ja': 'クラシック', 'ko': '클래식', 'zh_TW': '經典'},
+  '紧凑': {'en': 'Compact', 'ja': 'コンパクト', 'ko': '컴팩트', 'zh_TW': '緊湊'},
+  '横向': {'en': 'Wide', 'ja': '横長', 'ko': '가로형', 'zh_TW': '橫向'},
+  '纵向': {'en': 'Vertical', 'ja': '縦長', 'ko': '세로형', 'zh_TW': '縱向'},
+  '轻线': {'en': 'Light line', 'ja': '細線', 'ko': '얇은 선', 'zh_TW': '輕線'},
+  '横幅': {'en': 'Banner', 'ja': '横帯', 'ko': '가로 배너', 'zh_TW': '橫幅'},
+  '窄条': {'en': 'Strip', 'ja': '細帯', 'ko': '좁은 띠', 'zh_TW': '窄條'},
+  '竖框': {'en': 'Vertical box', 'ja': '縦枠', 'ko': '세로 상자', 'zh_TW': '直框'},
+  '短句': {'en': 'Short line', 'ja': '短文', 'ko': '짧은 문장', 'zh_TW': '短句'},
+  '低声': {'en': 'Low voice', 'ja': '小声', 'ko': '낮은 목소리', 'zh_TW': '低聲'},
+  '短促': {'en': 'Brief', 'ja': '短い叫び', 'ko': '짧은 외침', 'zh_TW': '短促'},
+  '爆发': {'en': 'Burst', 'ja': '爆発', 'ko': '폭발', 'zh_TW': '爆發'},
+  '旁白框 · 纯黑直角框，无尾巴': {
+    'en': 'Narration · black square-corner frame, no tail',
+    'ja': 'ナレーション · 黒い直角枠、しっぽなし',
+    'ko': '내레이션 · 검은 직각 테두리, 꼬리 없음',
+    'zh_TW': '旁白框 · 純黑直角框，無尾巴'
+  },
+  '已应用“{preset}”气泡预设': {
+    'en': 'Applied the “{preset}” bubble preset',
+    'ja': '「{preset}」吹き出しプリセットを適用しました',
+    'ko': '“{preset}” 말풍선 프리셋을 적용했습니다',
+    'zh_TW': '已套用「{preset}」氣泡預設'
+  },
   '字体': {'en': 'Font', 'ja': 'フォント', 'ko': '글꼴', 'zh_TW': '字體'},
   '字体颜色': {'en': 'Text color', 'ja': '文字色', 'ko': '글자 색상', 'zh_TW': '字體顏色'},
   '字体大小': {'en': 'Font size', 'ja': '文字サイズ', 'ko': '글자 크기', 'zh_TW': '字體大小'},
