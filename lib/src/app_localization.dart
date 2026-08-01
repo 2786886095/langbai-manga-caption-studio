@@ -1277,6 +1277,25 @@ const _workspaceTranslations = <String, Map<String, String>>{
     'ko': '말풍선 스타일',
     'zh_TW': '氣泡樣式'
   },
+  '正在保存': {'en': 'Saving', 'ja': '保存中', 'ko': '저장 중', 'zh_TW': '正在儲存'},
+  '等待自动保存': {
+    'en': 'Waiting to auto-save',
+    'ja': '自動保存待機中',
+    'ko': '자동 저장 대기 중',
+    'zh_TW': '等待自動儲存'
+  },
+  '自动保存重试中': {
+    'en': 'Retrying auto-save',
+    'ja': '自動保存を再試行中',
+    'ko': '자동 저장 재시도 중',
+    'zh_TW': '正在重試自動儲存'
+  },
+  '回退到最近保存': {
+    'en': 'Revert to last save',
+    'ja': '直前の保存に戻す',
+    'ko': '최근 저장으로 되돌리기',
+    'zh_TW': '回退到最近儲存'
+  },
   '旁白框 · 纯黑直角框，无尾巴': {
     'en': 'Narration · black square-corner frame, no tail',
     'ja': 'ナレーション · 黒い直角枠、しっぽなし',

@@ -89,6 +89,35 @@ class _ProjectSnapshot {
   final int selectedBubble;
 }
 
+class _ProjectCheckpoint {
+  const _ProjectCheckpoint({
+    required this.snapshot,
+    required this.script,
+    required this.pageCount,
+  });
+
+  factory _ProjectCheckpoint.capture(
+    List<ImagePage> pages,
+    int selectedPage,
+    int selectedBubble,
+    String script,
+  ) =>
+      _ProjectCheckpoint(
+        snapshot: _ProjectSnapshot.capture(
+          pages,
+          selectedPage,
+          selectedBubble,
+          List.generate(pages.length, (index) => index),
+        ),
+        script: script,
+        pageCount: pages.length,
+      );
+
+  final _ProjectSnapshot snapshot;
+  final String script;
+  final int pageCount;
+}
+
 enum _DragMode {
   move,
   topLeft,
@@ -168,18 +197,24 @@ class WorkspaceScreen extends StatefulWidget {
   State<WorkspaceScreen> createState() => _WorkspaceScreenState();
 }
 
-class _WorkspaceScreenState extends State<WorkspaceScreen> {
+class _WorkspaceScreenState extends State<WorkspaceScreen>
+    with WidgetsBindingObserver {
   final _engine = const LayoutEngine();
   final _script = TextEditingController();
   final List<ImagePage> _pages = [];
   final List<_ProjectSnapshot> _undoStack = [];
   final List<_ProjectSnapshot> _redoStack = [];
   final ValueNotifier<int> _canvasRevision = ValueNotifier(0);
+  Timer? _autoSaveTimer;
+  _ProjectCheckpoint? _lastSavedCheckpoint;
+  _ProjectCheckpoint? _previousSavedCheckpoint;
   int _selectedPage = 0;
   int _selectedBubble = 0;
   bool _processing = true;
   bool _exporting = false;
   bool _saving = false;
+  bool _autoSaving = false;
+  bool _autoSaveFailed = false;
   bool _dirty = false;
   bool _isDemoProject = false;
   bool _showRendered = true;
@@ -201,6 +236,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   int _sourceLoadGeneration = 0;
   int _mobileDestination = 2;
 
+  static const _autoSaveDelay = Duration(seconds: 1);
+  static const _autoSaveRetryDelay = Duration(seconds: 3);
+
   ImagePage? get _page =>
       _pages.isEmpty ? null : _pages[_selectedPage.clamp(0, _pages.length - 1)];
   BubblePlacement? get _bubble {
@@ -215,9 +253,20 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _projectName = widget.projectName;
     _loadStoredProject();
     _loadSettings();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _autoSaveTimer?.cancel();
+      unawaited(_flushAutoSave());
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -314,7 +363,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 
   @override
   void dispose() {
-    if (_dirty && _pages.isNotEmpty) unawaited(_persistLocalProject());
+    WidgetsBinding.instance.removeObserver(this);
+    _autoSaveTimer?.cancel();
+    if (_dirty && _pages.isNotEmpty) {
+      unawaited(_persistLocalProject(includeManifest: true));
+    }
     _clearActiveSourceImage();
     _disposePages(_pages);
     _canvasRevision.dispose();
@@ -380,6 +433,86 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   void _markDirty() {
     _editRevision++;
     _dirty = true;
+    _autoSaveFailed = false;
+    _scheduleAutoSave();
+  }
+
+  void _scheduleAutoSave([Duration delay = _autoSaveDelay]) {
+    _autoSaveTimer?.cancel();
+    if (_pages.isEmpty || _processing || _isDemoProject) return;
+    _autoSaveTimer = Timer(
+      delay,
+      () => unawaited(_runAutoSave()),
+    );
+  }
+
+  Future<void> _flushAutoSave() async {
+    _autoSaveTimer?.cancel();
+    if (_dirty) await _runAutoSave();
+  }
+
+  Future<void> _runAutoSave() async {
+    if (!mounted || _pages.isEmpty || !_dirty || _saving || _autoSaving) {
+      if (_dirty && (_saving || _autoSaving)) _scheduleAutoSave();
+      return;
+    }
+    setState(() => _autoSaving = true);
+    var failed = false;
+    try {
+      // A compact manifest checkpoint writes captions and geometry without
+      // copying source image bytes again. The edit layer remains a second,
+      // independently recoverable copy.
+      await _persistLocalProject(includeManifest: true);
+    } catch (_) {
+      failed = true;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _autoSaving = false;
+          _autoSaveFailed = failed;
+        });
+        if (_dirty) {
+          _scheduleAutoSave(
+            failed ? _autoSaveRetryDelay : _autoSaveDelay,
+          );
+        }
+      }
+    }
+  }
+
+  String get _saveStatusText {
+    if (_autoSaving || _saving) return '正在保存';
+    if (_autoSaveFailed) return '自动保存重试中';
+    if (_dirty) return '等待自动保存';
+    return '已保存 · 本地';
+  }
+
+  IconData get _saveStatusIcon {
+    if (_autoSaving || _saving) return Icons.sync;
+    if (_autoSaveFailed) return Icons.error_outline;
+    if (_dirty) return Icons.schedule;
+    return Icons.check_circle;
+  }
+
+  Color get _saveStatusColor {
+    if (_autoSaveFailed) return AppColors.warning;
+    if (_autoSaving || _saving || _dirty) return AppColors.warning;
+    return AppColors.success;
+  }
+
+  void _recordSavedCheckpoint({bool resetHistory = false}) {
+    final checkpoint = _ProjectCheckpoint.capture(
+      _pages,
+      _selectedPage,
+      _selectedBubble,
+      _script.text,
+    );
+    if (resetHistory) {
+      _previousSavedCheckpoint = null;
+    } else if (_lastSavedCheckpoint != null) {
+      _previousSavedCheckpoint = _lastSavedCheckpoint;
+    }
+    _lastSavedCheckpoint = checkpoint;
   }
 
   Future<void> _loadStoredProject() async {
@@ -443,6 +576,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         _editRevision = 0;
         _structureDirty = needsMigration;
       });
+      _recordSavedCheckpoint(resetHistory: true);
       unawaited(_loadSelectedPageSource());
       // Opening a project is read-only. In particular, never rewrite the edit
       // layer during load: doing so used to make a stale/empty overlay
@@ -474,15 +608,28 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     }
   }
 
-  Future<void> _persistLocalProject({bool forceFull = false}) async {
+  Future<void> _persistLocalProject({
+    bool forceFull = false,
+    bool includeManifest = false,
+  }) async {
     if (_pages.isEmpty || _saving) return;
     _saving = true;
     final savingRevision = _editRevision;
     final savingStructure = forceFull || _structureDirty;
+    final savingManifest = savingStructure || includeManifest;
     try {
-      if (savingStructure) {
+      if (savingManifest) {
         if (supportsIncrementalProjectStorage) {
-          await _saveIncrementalProject();
+          if (savingStructure) {
+            await _saveIncrementalProject();
+          } else {
+            await saveLocalProjectManifest(
+              widget.projectId,
+              widget.projectName,
+              encodeProjectManifest(_pages, _script.text, fonts: _fontBytes),
+              thumbnailBase64: _projectThumbnailBase64,
+            );
+          }
         } else {
           await saveLocalProject(
             widget.projectId,
@@ -503,6 +650,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           _dirty = false;
           if (savingStructure) _structureDirty = false;
         });
+        _recordSavedCheckpoint();
       }
     } finally {
       _saving = false;
@@ -523,7 +671,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   }
 
   Future<void> _returnToProjects() async {
-    if (_dirty && _pages.isNotEmpty) await _persistLocalProject();
+    _autoSaveTimer?.cancel();
+    if (_dirty && _pages.isNotEmpty) {
+      await _persistLocalProject(includeManifest: true);
+    }
     if (mounted) widget.onExitToProjects();
   }
 
@@ -713,7 +864,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     );
   }
 
-  void _autoArrange() {
+  bool _autoArrange() {
     final parsed = parseCaptionScript(_script.text);
     final blocking = validateScriptForPages(parsed, _pages);
     if (blocking.isNotEmpty) {
@@ -730,7 +881,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           ],
         ),
       );
-      return;
+      return false;
     }
     final migratedLegacy = parsed.sections.any(
       (section) => section.legacyHeader,
@@ -769,15 +920,6 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       _markDirty();
     });
     if (migratedLegacy) _script.text = buildBcsScript(_pages);
-    final bubbleCount = _pages.fold<int>(
-      0,
-      (total, page) => total + page.placements.length,
-    );
-    ScaffoldMessenger.of(context).showSnackBar(
-      _quickFeedback(
-        '字幕已应用并完成排版：${_pages.length} 张图片，共 $bubbleCount 个气泡。脚本中的矩形坐标和样式已生效。',
-      ),
-    );
     if (mounted && (parsed.warnings.isNotEmpty || migratedLegacy)) {
       final messages = <String>[
         if (migratedLegacy) '旧版文件名脚本已按段落出现顺序迁移为 v2；文件名不再参与匹配。',
@@ -799,6 +941,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         ),
       );
     }
+    return true;
   }
 
   void _resetCurrentPageLayout() {
@@ -915,6 +1058,58 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       ),
     );
     _restoreSnapshot(snapshot);
+  }
+
+  _ProjectCheckpoint? get _rollbackCheckpoint =>
+      _dirty ? _lastSavedCheckpoint : _previousSavedCheckpoint;
+
+  bool get _canRollbackToLastSave {
+    final checkpoint = _rollbackCheckpoint;
+    return checkpoint != null &&
+        checkpoint.pageCount == _pages.length &&
+        _dirty &&
+        !_saving &&
+        !_autoSaving;
+  }
+
+  void _rollbackToLastSave() {
+    final checkpoint = _rollbackCheckpoint;
+    if (checkpoint == null || checkpoint.pageCount != _pages.length) return;
+    final revertingSavedVersion = !_dirty;
+    _autoSaveTimer?.cancel();
+    _remember();
+    setState(() {
+      for (final entry in checkpoint.snapshot.pages.entries) {
+        if (entry.key < _pages.length) entry.value.restore(_pages[entry.key]);
+      }
+      _script.text = checkpoint.script;
+      _selectedPage = checkpoint.snapshot.selectedPage.clamp(
+        0,
+        _pages.length - 1,
+      );
+      final count = _pages[_selectedPage].placements.length;
+      _selectedBubble = count == 0
+          ? 0
+          : checkpoint.snapshot.selectedBubble.clamp(0, count - 1);
+      _selectionVisible = false;
+      _structureDirty = false;
+      _autoSaveFailed = false;
+      if (revertingSavedVersion) {
+        _markDirty();
+      } else {
+        _dirty = false;
+        _editRevision++;
+      }
+    });
+    _canvasRevision.value++;
+    unawaited(_loadSelectedPageSource());
+    ScaffoldMessenger.of(context).showSnackBar(
+      _quickFeedback(
+        revertingSavedVersion
+            ? '已回退一个保存版本，正在自动保存；可使用撤销恢复当前修改'
+            : '已回退到最近保存版本；可使用撤销恢复当前修改',
+      ),
+    );
   }
 
   void _restoreSnapshot(_ProjectSnapshot snapshot) {
@@ -1104,10 +1299,14 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       page.captions.add(caption);
       page.placements.add(bubble);
       _selectedBubble = page.placements.length - 1;
-      _selectionVisible = false;
+      _selectionVisible = true;
       page.approved = false;
       _markDirty();
     });
+    _canvasRevision.value++;
+    ScaffoldMessenger.of(context).showSnackBar(
+      _quickFeedback('已添加气泡，直接在右侧输入文字或拖动调整位置'),
+    );
   }
 
   void _duplicateBubble() {
@@ -1415,7 +1614,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   }
 
   Future<void> _saveProject() async {
-    if (_pages.isEmpty || _saving) return;
+    if (_pages.isEmpty || _saving || _autoSaving) return;
+    _autoSaveTimer?.cancel();
     setState(() => _saving = true);
     final savingRevision = _editRevision;
     try {
@@ -1456,6 +1656,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           _dirty = false;
           _structureDirty = false;
         });
+        _recordSavedCheckpoint();
       }
       ScaffoldMessenger.of(
         context,
@@ -1614,7 +1815,31 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       if (appliedScript == null || !mounted) return;
       _script.text = appliedScript;
       setState(_markDirty);
-      _autoArrange();
+      if (!_autoArrange()) return;
+      try {
+        // Applying a subtitle script is an explicit project milestone. Save a
+        // fresh manifest as well as the lightweight edit layer before showing
+        // success, so a normal app close cannot leave the next launch with
+        // only the older empty manifest.
+        await _persistLocalProject(includeManifest: true);
+        if (mounted) {
+          final bubbleCount = _pages.fold<int>(
+            0,
+            (total, page) => total + page.placements.length,
+          );
+          ScaffoldMessenger.of(context).showSnackBar(
+            _quickFeedback(
+              '字幕已应用并保存：${_pages.length} 张图片，共 $bubbleCount 个气泡。',
+            ),
+          );
+        }
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: LText('字幕已应用，但本地保存失败：$error')),
+          );
+        }
+      }
     } finally {
       draft.dispose();
     }
@@ -1903,7 +2128,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           content: SizedBox(
             width: 560,
             child: LText(
-              '1. 软件启动后先进入项目页。可以创建、删除或切换项目；名称留空时会按创建时间自动命名。\n\n2. 点击“添加图片”后，图片默认按文件名自然排序，例如 1、2、10。可以在顺序确认窗口继续拖动调整。\n\n3. 点击顶部“字幕”。每个 [图片 N] 段必须包含 @原图尺寸；气泡使用原图像素 @矩形=x,y,宽,高。字幕只按确认顺序对应，不按文件名匹配。\n\n4. 字幕编辑器采用草稿模式；点击取消不会改变工程。稳定的 @气泡ID 可在再次应用时保留手工位置和样式。\n\n5. 单击气泡会立即显示选框；单击画布空白处会关闭选框，直到再次单击气泡。右侧可修改文字、形状、字体、颜色、字号、行距、描边和尾巴方向。\n\n6. 项目不再持续自动保存。点击右上角保存按钮，或切换回项目页时保存一次。导出位于右上角，不属于编辑流程。\n\n图片和字幕始终只在当前设备处理，不会上传。',
+              '1. 软件启动后先进入项目页。可以创建、删除或切换项目；名称留空时会按创建时间自动命名。\n\n2. 点击“添加图片”后，图片默认按文件名自然排序，例如 1、2、10。可以在顺序确认窗口继续拖动调整。\n\n3. 点击顶部“字幕”。每个 [图片 N] 段必须包含 @原图尺寸；气泡使用原图像素 @矩形=x,y,宽,高。字幕只按确认顺序对应，不按文件名匹配。\n\n4. 字幕编辑器采用草稿模式；点击取消不会改变工程。稳定的 @气泡ID 可在再次应用时保留手工位置和样式。\n\n5. 单击气泡会立即显示选框；单击画布空白处会关闭选框，直到再次单击气泡。右侧可修改文字、形状、字体、颜色、字号、行距、描边和尾巴方向。\n\n6. 编辑停止约一秒后会自动保存；保存后可使用“回退到最近保存”恢复上一个保存版本，也可用撤销恢复当前修改。导出位于右上角，不属于编辑流程。\n\n图片和字幕始终只在当前设备处理，不会上传。',
               style: const TextStyle(fontSize: 15, height: 1.6),
             ),
           ),
@@ -2007,13 +2232,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                   Row(
                     children: [
                       Icon(
-                        _dirty ? Icons.circle : Icons.check_circle,
+                        _saveStatusIcon,
                         size: 10,
-                        color: _dirty ? AppColors.warning : AppColors.success,
+                        color: _saveStatusColor,
                       ),
                       const SizedBox(width: 4),
                       LText(
-                        _dirty ? '有未保存修改' : '已保存 · 本地',
+                        _saveStatusText,
                         style: const TextStyle(
                           fontSize: 10,
                           color: AppColors.muted,
@@ -2025,9 +2250,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               ),
             ),
             IconButton(
-              onPressed: _saving ? null : _saveProject,
+              onPressed: (_saving || _autoSaving) ? null : _saveProject,
               tooltip: tr('保存工程'),
-              icon: _saving
+              icon: (_saving || _autoSaving)
                   ? const SizedBox(
                       width: 18,
                       height: 18,
@@ -2126,13 +2351,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    _dirty ? Icons.sync : Icons.check_circle,
-                    color: _dirty ? AppColors.warning : AppColors.success,
+                    _saveStatusIcon,
+                    color: _saveStatusColor,
                     size: 16,
                   ),
                   const SizedBox(width: 5),
                   LText(
-                    _dirty ? '有未保存修改' : '已保存 · 本地',
+                    _saveStatusText,
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
@@ -2153,9 +2378,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 icon: const Icon(Icons.folder_open_outlined),
               ),
             IconButton(
-              onPressed: _saving ? null : _saveProject,
+              onPressed: (_saving || _autoSaving) ? null : _saveProject,
               tooltip: tr('保存工程'),
-              icon: _saving
+              icon: (_saving || _autoSaving)
                   ? const SizedBox(
                       width: 18,
                       height: 18,
@@ -2948,10 +3173,14 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               tooltip: tr('重做'),
               icon: const Icon(Icons.redo, size: 19),
             ),
-            IconButton(
+            IconButton.filled(
               onPressed: _addBubble,
               tooltip: tr('新建气泡'),
               icon: const Icon(Icons.add_comment_outlined, size: 19),
+              style: IconButton.styleFrom(
+                backgroundColor: AppColors.pink,
+                foregroundColor: Colors.white,
+              ),
             ),
             IconButton(
               onPressed: _bubble == null ? null : _showMobileInspectorSheet,
@@ -3034,6 +3263,23 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                     tooltip: tr('重做'),
                     icon: const Icon(Icons.redo, size: 20),
                   ),
+                  IconButton(
+                    onPressed:
+                        _canRollbackToLastSave ? _rollbackToLastSave : null,
+                    tooltip: tr('回退到最近保存'),
+                    icon: const Icon(Icons.restore, size: 20),
+                  ),
+                  const SizedBox(width: 4),
+                  FilledButton.icon(
+                    onPressed: _addBubble,
+                    icon: const Icon(Icons.add_comment_outlined, size: 18),
+                    label: LText('添加气泡'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 34),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
                   PopupMenuButton<String>(
                     tooltip: tr('气泡编辑命令'),
                     icon: const Icon(Icons.edit_note, size: 21),
@@ -3041,6 +3287,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       switch (value) {
                         case 'new':
                           _addBubble();
+                        case 'rollback':
+                          _rollbackToLastSave();
                         case 'duplicate':
                           _duplicateBubble();
                         case 'back':
@@ -3054,6 +3302,15 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       }
                     },
                     itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'rollback',
+                        enabled: _canRollbackToLastSave,
+                        child: ListTile(
+                          leading: const Icon(Icons.restore),
+                          title: LText('回退到最近保存'),
+                          dense: true,
+                        ),
+                      ),
                       PopupMenuItem(
                         value: 'new',
                         child: ListTile(
@@ -3555,7 +3812,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
-                    child: OutlinedButton.icon(
+                    child: FilledButton.tonalIcon(
                       onPressed: _page == null ? null : _addBubble,
                       icon: const Icon(Icons.add_comment_outlined),
                       label: LText('添加空白气泡'),
