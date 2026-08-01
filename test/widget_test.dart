@@ -510,7 +510,7 @@ void main() {
     expect(decoded.pages.single.approved, isTrue);
   });
 
-  test('incremental project manifest keeps source images out of JSON',
+  test('script-imported captions survive a manifest-only project reload',
       () async {
     final png = base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -535,7 +535,27 @@ void main() {
         ),
       ];
 
-    final manifest = encodeProjectManifest([page], '脚本');
+    const importedScript = '''
+@格式=BCS顺序字幕脚本
+@版本=2
+@坐标单位=px
+
+[图片 1]
+@原文件名=001.png
+@原图尺寸=1x1
+
+@气泡ID=p1-b1
+@矩形=0,0,1,1
+@尾巴=右下
+@气泡=对话气泡
+@字体=Noto Sans SC
+@字号=34
+@颜色=#141518
+@行距=1.25
+@描边=3
+增量工程
+''';
+    final manifest = encodeProjectManifest([page], importedScript);
     final json = utf8.decode(manifest);
     expect(json, isNot(contains('sourceImage')));
     expect(manifest.length, lessThan(2000));
@@ -546,6 +566,7 @@ void main() {
     });
     expect(decoded.pages.single.name, '001.png');
     expect(decoded.pages.single.captions.single.text, '增量工程');
+    expect(decoded.script, importedScript);
     decoded.pages.single.dispose();
     page.dispose();
   });
