@@ -325,10 +325,34 @@ int hitTestBubble(List<BubblePlacement> bubbles, Offset point) {
   return -1;
 }
 
+bool placedImageContainsPoint(PlacedImage image, Offset point) {
+  final center = Offset(image.x + image.width / 2, image.y + image.height / 2);
+  final local = point - center;
+  final cosine = math.cos(-image.rotation);
+  final sine = math.sin(-image.rotation);
+  final rotated = Offset(
+    local.dx * cosine - local.dy * sine,
+    local.dx * sine + local.dy * cosine,
+  );
+  return Rect.fromCenter(
+    center: Offset.zero,
+    width: image.width,
+    height: image.height,
+  ).contains(rotated);
+}
+
+int hitTestPlacedImage(List<PlacedImage> images, Offset point) {
+  for (var index = images.length - 1; index >= 0; index--) {
+    if (placedImageContainsPoint(images[index], point)) return index;
+  }
+  return -1;
+}
+
 class PagePainter extends CustomPainter {
   PagePainter({
     required this.page,
     this.selectedIndex,
+    this.selectedImageIndex,
     this.showBubbles = true,
     this.sourceImage,
     super.repaint,
@@ -336,6 +360,7 @@ class PagePainter extends CustomPainter {
           page.image,
           sourceImage,
           selectedIndex,
+          selectedImageIndex,
           showBubbles,
           for (final bubble in page.placements) ...[
             bubble.caption.text,
@@ -352,9 +377,24 @@ class PagePainter extends CustomPainter {
             bubble.fontFamily,
             bubble.fontColorValue,
           ],
+          for (final image in page.placedImages) ...[
+            image.image,
+            image.x,
+            image.y,
+            image.width,
+            image.height,
+            image.rotation,
+            image.opacity,
+            image.fit,
+            image.cropX,
+            image.cropY,
+            image.layer,
+            image.bubbleId,
+          ],
         ]);
   final ImagePage page;
   final int? selectedIndex;
+  final int? selectedImageIndex;
   final bool showBubbles;
   final ui.Image? sourceImage;
   final int _paintSignature;
@@ -379,6 +419,12 @@ class PagePainter extends CustomPainter {
     if (!showBubbles) return;
     final sx = size.width / page.originalWidth;
     final sy = size.height / page.originalHeight;
+    _drawPlacedImages(
+      canvas,
+      sx,
+      sy,
+      PlacedImageLayer.behindBubbles,
+    );
     for (var i = 0; i < page.placements.length; i++) {
       final bubble = page.placements[i];
       final rect = Rect.fromLTWH(
@@ -389,6 +435,135 @@ class PagePainter extends CustomPainter {
       );
       _drawBubble(canvas, rect, bubble, sx, sy, selectedIndex == i, i);
     }
+    _drawPlacedImages(
+      canvas,
+      sx,
+      sy,
+      PlacedImageLayer.aboveBubbles,
+    );
+  }
+
+  void _drawPlacedImages(
+    Canvas canvas,
+    double sx,
+    double sy,
+    PlacedImageLayer layer,
+  ) {
+    for (var index = 0; index < page.placedImages.length; index++) {
+      final image = page.placedImages[index];
+      if (image.layer != layer || image.bubbleId != null) continue;
+      _drawPlacedImage(canvas, image, index, sx, sy);
+    }
+  }
+
+  void _drawPlacedImage(
+    Canvas canvas,
+    PlacedImage image,
+    int index,
+    double sx,
+    double sy, {
+    Path? clipPath,
+  }) {
+    final rect = Rect.fromLTWH(
+      image.x * sx,
+      image.y * sy,
+      image.width * sx,
+      image.height * sy,
+    );
+    canvas.save();
+    if (clipPath != null) canvas.clipPath(clipPath);
+    canvas.translate(rect.center.dx, rect.center.dy);
+    canvas.rotate(image.rotation);
+    canvas.translate(-rect.center.dx, -rect.center.dy);
+    final source = _placedImageSourceRect(image);
+    var destination = rect;
+    if (image.fit == PlacedImageFit.contain) {
+      final sourceRatio = source.width / source.height;
+      final targetRatio = rect.width / rect.height;
+      destination = sourceRatio > targetRatio
+          ? Rect.fromCenter(
+              center: rect.center,
+              width: rect.width,
+              height: rect.width / sourceRatio,
+            )
+          : Rect.fromCenter(
+              center: rect.center,
+              width: rect.height * sourceRatio,
+              height: rect.height,
+            );
+    }
+    canvas.drawImageRect(
+      image.image,
+      source,
+      destination,
+      Paint()
+        ..filterQuality = FilterQuality.high
+        ..color = Colors.white.withOpacity(image.opacity.clamp(0, 1)),
+    );
+    canvas.restore();
+    if (selectedImageIndex == index) {
+      _drawImageSelection(canvas, rect, image.rotation);
+    }
+  }
+
+  void _drawBoundImages(
+    Canvas canvas,
+    BubblePlacement bubble,
+    Rect bubbleRect,
+    double sx,
+    double sy,
+    PlacedImageLayer layer,
+  ) {
+    final clip = _bubbleShapePath(bubbleRect, bubble.shape);
+    for (var index = 0; index < page.placedImages.length; index++) {
+      final image = page.placedImages[index];
+      if (image.bubbleId != bubble.caption.bubbleId || image.layer != layer) {
+        continue;
+      }
+      _drawPlacedImage(canvas, image, index, sx, sy, clipPath: clip);
+    }
+  }
+
+  Rect _placedImageSourceRect(PlacedImage image) {
+    final rasterWidth = image.image.width.toDouble();
+    final rasterHeight = image.image.height.toDouble();
+    if (image.fit == PlacedImageFit.contain) {
+      return Rect.fromLTWH(0, 0, rasterWidth, rasterHeight);
+    }
+    final targetRatio = image.width / image.height;
+    final sourceRatio = rasterWidth / rasterHeight;
+    if (sourceRatio > targetRatio) {
+      final width = rasterHeight * targetRatio;
+      final left = (rasterWidth - width) * image.cropX;
+      return Rect.fromLTWH(left, 0, width, rasterHeight);
+    }
+    final height = rasterWidth / targetRatio;
+    final top = (rasterHeight - height) * image.cropY;
+    return Rect.fromLTWH(0, top, rasterWidth, height);
+  }
+
+  void _drawImageSelection(Canvas canvas, Rect rect, double rotation) {
+    canvas.save();
+    canvas.translate(rect.center.dx, rect.center.dy);
+    canvas.rotate(rotation);
+    canvas.translate(-rect.center.dx, -rect.center.dy);
+    final outline = Paint()
+      ..color = const Color(0xffe94d72)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    canvas.drawRect(rect.inflate(5), outline);
+    final handlePaint = Paint()..color = Colors.white;
+    for (final point in bubbleResizeHandles(rect)) {
+      final handle = Rect.fromCenter(center: point, width: 10, height: 10);
+      canvas.drawRect(handle, handlePaint);
+      canvas.drawRect(handle, outline);
+    }
+    final rotationStart = Offset(rect.center.dx, rect.top - 5);
+    final rotationHandle = Offset(rect.center.dx, rect.top - 30);
+    canvas.drawLine(rotationStart, rotationHandle, outline);
+    canvas.drawCircle(rotationHandle, 6, handlePaint);
+    canvas.drawCircle(rotationHandle, 6, outline);
+    canvas.restore();
   }
 
   void _drawBubble(
@@ -431,6 +606,15 @@ class PagePainter extends CustomPainter {
       canvas.drawPath(shapePath, fill);
       canvas.drawPath(shapePath, stroke);
     }
+
+    _drawBoundImages(
+      canvas,
+      bubble,
+      rect,
+      sx,
+      sy,
+      PlacedImageLayer.behindBubbles,
+    );
 
     final thoughtInset = (rect.shortestSide * .18).clamp(10.0, 34.0);
     final thoughtWidthFactor =
@@ -503,6 +687,14 @@ class PagePainter extends CustomPainter {
         rect.center.dx - painter.width / 2,
         rect.center.dy - painter.height / 2,
       ),
+    );
+    _drawBoundImages(
+      canvas,
+      bubble,
+      rect,
+      sx,
+      sy,
+      PlacedImageLayer.aboveBubbles,
     );
     if (selected) {
       canvas.drawRect(

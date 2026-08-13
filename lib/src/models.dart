@@ -7,6 +7,87 @@ enum BubbleShape { ellipse, rounded, shout, thought, whisper }
 
 enum TailDirection { upLeft, upRight, downLeft, downRight }
 
+enum PlacedImageFit { contain, cover }
+
+enum PlacedImageLayer { behindBubbles, aboveBubbles }
+
+const _keepBubbleBinding = Object();
+
+class PlacedImage {
+  const PlacedImage({
+    required this.id,
+    required this.name,
+    required this.bytes,
+    required this.image,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+    this.rotation = 0,
+    this.opacity = 1,
+    this.fit = PlacedImageFit.contain,
+    this.cropX = .5,
+    this.cropY = .5,
+    this.layer = PlacedImageLayer.aboveBubbles,
+    this.bubbleId,
+  });
+
+  final String id;
+  final String name;
+  final Uint8List bytes;
+  final ui.Image image;
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+  final double rotation;
+  final double opacity;
+  final PlacedImageFit fit;
+  final double cropX;
+  final double cropY;
+  final PlacedImageLayer layer;
+  final String? bubbleId;
+
+  bool get isInsideBubble => bubbleId != null;
+
+  PlacedImage copyWith({
+    String? id,
+    String? name,
+    Uint8List? bytes,
+    ui.Image? image,
+    double? x,
+    double? y,
+    double? width,
+    double? height,
+    double? rotation,
+    double? opacity,
+    PlacedImageFit? fit,
+    double? cropX,
+    double? cropY,
+    PlacedImageLayer? layer,
+    Object? bubbleId = _keepBubbleBinding,
+  }) =>
+      PlacedImage(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        bytes: bytes ?? this.bytes,
+        image: image ?? this.image,
+        x: x ?? this.x,
+        y: y ?? this.y,
+        width: width ?? this.width,
+        height: height ?? this.height,
+        rotation: rotation ?? this.rotation,
+        opacity: opacity ?? this.opacity,
+        fit: fit ?? this.fit,
+        cropX: cropX ?? this.cropX,
+        cropY: cropY ?? this.cropY,
+        layer: layer ?? this.layer,
+        bubbleId: identical(bubbleId, _keepBubbleBinding)
+            ? this.bubbleId
+            : bubbleId as String?,
+      );
+}
+
 const defaultBubbleFontFamily = 'Noto Sans SC';
 
 String normalizeBubbleFontFamily(String? family) {
@@ -190,6 +271,7 @@ class ImagePage {
   final int originalHeight;
   List<CaptionLine> captions = [];
   List<BubblePlacement> placements = [];
+  List<PlacedImage> placedImages = [];
   bool approved = false;
 
   List<String> get validationIssues {
@@ -253,9 +335,18 @@ class ImagePage {
 
   double get aspectRatio => originalWidth / originalHeight;
 
-  void dispose() => image.dispose();
+  void dispose() {
+    image.dispose();
+    for (final placed in placedImages) {
+      placed.image.dispose();
+    }
+  }
 }
 
 int _pageIdCounter = 0;
 String _newPageId() =>
     'page-${DateTime.now().microsecondsSinceEpoch}-${_pageIdCounter++}';
+
+int _placedImageIdCounter = 0;
+String newPlacedImageId() =>
+    'asset-${DateTime.now().microsecondsSinceEpoch}-${_placedImageIdCounter++}';

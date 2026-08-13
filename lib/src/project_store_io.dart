@@ -31,6 +31,13 @@ Future<Uint8List> loadLocalProjectImage(String id, String pageId) async {
   ).readAsBytes();
 }
 
+Future<Uint8List> loadLocalProjectAsset(String id, String assetId) async {
+  final directory = await _incrementalDirectory(id);
+  return File(
+    '${directory.path}${Platform.pathSeparator}assets${Platform.pathSeparator}${_storageName(assetId)}.bin',
+  ).readAsBytes();
+}
+
 Future<void> saveLocalProjectImage(
   String id,
   String pageId,
@@ -43,6 +50,21 @@ Future<void> saveLocalProjectImage(
   await images.create(recursive: true);
   await File(
     '${images.path}${Platform.pathSeparator}${_storageName(pageId)}.bin',
+  ).writeAsBytes(bytes, flush: true);
+}
+
+Future<void> saveLocalProjectAsset(
+  String id,
+  String assetId,
+  Uint8List bytes,
+) async {
+  final directory = await _incrementalDirectory(id);
+  final assets = Directory(
+    '${directory.path}${Platform.pathSeparator}assets',
+  );
+  await assets.create(recursive: true);
+  await File(
+    '${assets.path}${Platform.pathSeparator}${_storageName(assetId)}.bin',
   ).writeAsBytes(bytes, flush: true);
 }
 

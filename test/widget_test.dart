@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:bubble_caption_studio/src/app.dart';
@@ -510,6 +511,114 @@ void main() {
     expect(decoded.pages.single.approved, isTrue);
   });
 
+  test('project files embed placed images while BCS stays caption-only',
+      () async {
+    final png = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    );
+    final pageFrame =
+        await (await ui.instantiateImageCodec(png)).getNextFrame();
+    final assetFrame =
+        await (await ui.instantiateImageCodec(png)).getNextFrame();
+    final page = ImagePage(
+      name: '001.png',
+      bytes: Uint8List.fromList(png),
+      image: pageFrame.image,
+    );
+    const caption = CaptionLine(
+      speaker: '',
+      text: '图片与文字共存',
+      bubbleId: 'p1-b1',
+    );
+    page
+      ..captions = const [caption]
+      ..placements = const [
+        BubblePlacement(
+          caption: caption,
+          x: 40,
+          y: 60,
+          width: 300,
+          height: 180,
+        ),
+      ]
+      ..placedImages = [
+        PlacedImage(
+          id: 'asset-one',
+          name: '表情.png',
+          bytes: Uint8List.fromList(png),
+          image: assetFrame.image,
+          x: 80,
+          y: 90,
+          width: 96,
+          height: 96,
+          rotation: .25,
+          opacity: .7,
+          fit: PlacedImageFit.cover,
+          cropX: .2,
+          cropY: .8,
+          layer: PlacedImageLayer.aboveBubbles,
+          bubbleId: 'p1-b1',
+        ),
+      ];
+
+    final bcs = buildBcsScript([page]);
+    expect(bcs, isNot(contains('asset-one')));
+    expect(bcs, isNot(contains('表情.png')));
+
+    final packed = encodeProject([page], bcs);
+    final packedJson = utf8.decode(packed);
+    expect(packedJson, contains('asset-one'));
+    expect(packedJson, contains(base64Encode(png)));
+    final decoded = await decodeProject(packed);
+    final decodedAsset = decoded.pages.single.placedImages.single;
+    expect(decodedAsset.name, '表情.png');
+    expect(decodedAsset.bubbleId, 'p1-b1');
+    expect(decodedAsset.fit, PlacedImageFit.cover);
+    expect(decodedAsset.rotation, .25);
+    expect(decodedAsset.opacity, .7);
+
+    final manifest = encodeProjectManifest([page], bcs);
+    final manifestJson = utf8.decode(manifest);
+    expect(manifestJson, contains('asset-one'));
+    expect(manifestJson, isNot(contains('"bytes"')));
+    final decodedManifest = await decodeProjectManifest(
+      manifest,
+      (_) async => Uint8List.fromList(png),
+      (assetId) async {
+        expect(assetId, 'asset-one');
+        return Uint8List.fromList(png);
+      },
+    );
+    expect(decodedManifest.pages.single.placedImages.single.bubbleId, 'p1-b1');
+
+    decoded.pages.single.dispose();
+    decodedManifest.pages.single.dispose();
+    page.dispose();
+  });
+
+  test('placed image hit testing supports rotation and topmost order',
+      () async {
+    final png = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    );
+    final frame = await (await ui.instantiateImageCodec(png)).getNextFrame();
+    final bottom = PlacedImage(
+      id: 'bottom',
+      name: 'bottom.png',
+      bytes: Uint8List.fromList(png),
+      image: frame.image,
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 100,
+    );
+    final top = bottom.copyWith(id: 'top', rotation: math.pi / 2);
+    expect(placedImageContainsPoint(top, const Offset(200, 230)), isTrue);
+    expect(placedImageContainsPoint(top, const Offset(305, 150)), isFalse);
+    expect(hitTestPlacedImage([bottom, top], const Offset(200, 150)), 1);
+    frame.image.dispose();
+  });
+
   test('script-imported captions survive a manifest-only project reload',
       () async {
     final png = base64Decode(
@@ -604,7 +713,7 @@ void main() {
       page
         ..captions = []
         ..placements = [];
-      final result = applyProjectEdits(edits, [page]);
+      final result = await applyProjectEdits(edits, [page]);
       expect(result.script, 'small script');
       expect(result.preservedManifestPages, 0);
       expect(page.captions.single.text, '修改后的文字');
@@ -650,7 +759,7 @@ void main() {
       ],
     }));
 
-    final result = applyProjectEdits(Uint8List.fromList(legacy), [page]);
+    final result = await applyProjectEdits(Uint8List.fromList(legacy), [page]);
     expect(result.recoveredLegacyData, isTrue);
     expect(page.captions.single.text, '主清单仍有的字幕');
     expect(page.placements, hasLength(1));

@@ -322,6 +322,33 @@ ipcMain.handle('desktop:read-image-file', async (_event, request) => {
   return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 });
 
+ipcMain.handle('desktop:load-sticker-library', async () => {
+  const filePath = path.join(app.getPath('userData'), 'sticker-library.json');
+  for (const candidate of [filePath, `${filePath}.bak`]) {
+    try {
+      const raw = await fs.readFile(candidate, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.format === 'langbai-sticker-library') return raw;
+    } catch {
+      // Try the previous complete library generation.
+    }
+  }
+  return null;
+});
+
+ipcMain.handle('desktop:save-sticker-library', async (_event, request) => {
+  const raw = String(request.json || '');
+  const parsed = JSON.parse(raw);
+  if (!parsed || parsed.format !== 'langbai-sticker-library') {
+    throw new Error('表情包库格式无效');
+  }
+  await atomicWriteWithBackup(
+    path.join(app.getPath('userData'), 'sticker-library.json'),
+    Buffer.from(raw, 'utf8'),
+  );
+  return 'ok';
+});
+
 ipcMain.handle('desktop:list-projects', async () => {
   const projects = await readProjectCatalog();
   projects.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
@@ -375,12 +402,36 @@ ipcMain.handle('desktop:load-project-image', async (_event, request) => {
   return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 });
 
+ipcMain.handle('desktop:load-project-asset', async (_event, request) => {
+  const directory = await projectDirectory();
+  const bytes = await fs.readFile(
+    path.join(
+      directory,
+      storageName(request.id),
+      'assets',
+      `${storageName(request.assetId)}.bin`,
+    ),
+  );
+  return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+});
+
 ipcMain.handle('desktop:save-project-image', async (_event, request) => {
   const directory = await projectDirectory();
   const imageDirectory = path.join(directory, storageName(request.id), 'images');
   await fs.mkdir(imageDirectory, { recursive: true });
   await fs.writeFile(
     path.join(imageDirectory, `${storageName(request.pageId)}.bin`),
+    requestBuffer(request),
+  );
+  return 'ok';
+});
+
+ipcMain.handle('desktop:save-project-asset', async (_event, request) => {
+  const directory = await projectDirectory();
+  const assetDirectory = path.join(directory, storageName(request.id), 'assets');
+  await fs.mkdir(assetDirectory, { recursive: true });
+  await fs.writeFile(
+    path.join(assetDirectory, `${storageName(request.assetId)}.bin`),
     requestBuffer(request),
   );
   return 'ok';

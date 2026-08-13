@@ -41,6 +41,7 @@ Uint8List encodeProjectManifest(
       fonts: fonts,
       format: 'bubble-caption-studio-manifest',
       includeImages: false,
+      includePlacedImageBytes: false,
     );
 
 Uint8List _encodeProjectDocument(
@@ -49,6 +50,7 @@ Uint8List _encodeProjectDocument(
   required Map<String, Uint8List> fonts,
   required String format,
   required bool includeImages,
+  bool includePlacedImageBytes = true,
 }) {
   final json = <String, Object?>{
     'format': format,
@@ -59,7 +61,12 @@ Uint8List _encodeProjectDocument(
       for (final entry in fonts.entries) entry.key: base64Encode(entry.value),
     },
     'pages': [
-      for (final page in pages) _encodePage(page, includeImage: includeImages),
+      for (final page in pages)
+        _encodePage(
+          page,
+          includeImage: includeImages,
+          includePlacedImageBytes: includePlacedImageBytes,
+        ),
     ],
   };
   return Uint8List.fromList(utf8.encode(jsonEncode(json)));
@@ -93,6 +100,31 @@ Map<String, Object?> _encodeEditablePage(ImagePage page) => {
       'placements': [
         for (final bubble in page.placements) _encodePlacement(bubble),
       ],
+      'placedImages': [
+        for (final image in page.placedImages)
+          _encodePlacedImage(image, includeBytes: false),
+      ],
+    };
+
+Map<String, Object?> _encodePlacedImage(
+  PlacedImage image, {
+  bool includeBytes = true,
+}) =>
+    {
+      'id': image.id,
+      'name': image.name,
+      if (includeBytes) 'bytes': base64Encode(image.bytes),
+      'x': image.x,
+      'y': image.y,
+      'width': image.width,
+      'height': image.height,
+      'rotation': image.rotation,
+      'opacity': image.opacity,
+      'fit': image.fit.name,
+      'cropX': image.cropX,
+      'cropY': image.cropY,
+      'layer': image.layer.name,
+      if (image.bubbleId != null) 'bubbleId': image.bubbleId,
     };
 
 Map<String, Object?> _encodePlacement(BubblePlacement bubble) => {
@@ -115,6 +147,7 @@ Map<String, Object?> _encodePlacement(BubblePlacement bubble) => {
 Map<String, Object?> _encodePage(
   ImagePage page, {
   bool includeImage = true,
+  bool includePlacedImageBytes = true,
 }) =>
     {
       'pageId': page.pageId,
@@ -135,6 +168,10 @@ Map<String, Object?> _encodePage(
       'placements': [
         for (final bubble in page.placements) _encodePlacement(bubble),
       ],
+      'placedImages': [
+        for (final image in page.placedImages)
+          _encodePlacedImage(image, includeBytes: includePlacedImageBytes),
+      ],
     };
 
 class ProjectEditApplyResult {
@@ -149,10 +186,10 @@ class ProjectEditApplyResult {
   bool get recoveredLegacyData => preservedManifestPages > 0;
 }
 
-ProjectEditApplyResult applyProjectEdits(
+Future<ProjectEditApplyResult> applyProjectEdits(
   Uint8List bytes,
   List<ImagePage> pages,
-) {
+) async {
   final root = jsonDecode(utf8.decode(bytes));
   final schemaVersion = root is Map<String, dynamic>
       ? (root['schemaVersion'] as num?)?.toInt()
@@ -197,10 +234,69 @@ ProjectEditApplyResult applyProjectEdits(
       ..captions = captions
       ..placements = placements
       ..approved = raw['approved'] == true;
+    final previousImages = {
+      for (final image in page.placedImages) image.id: image
+    };
+    final decodedImages = <PlacedImage>[];
+    for (final item in (raw['placedImages'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()) {
+      try {
+        final id = item['id']?.toString() ?? '';
+        decodedImages.add(
+          await _decodePlacedImage(item, source: previousImages[id]),
+        );
+      } catch (_) {
+        // A damaged optional image element must not erase valid captions.
+      }
+    }
+    for (final image in page.placedImages) {
+      if (!decodedImages.any((item) => identical(item.image, image.image))) {
+        image.image.dispose();
+      }
+    }
+    page.placedImages = decodedImages;
   }
   return ProjectEditApplyResult(
     script: root['script']?.toString() ?? '',
     preservedManifestPages: preservedManifestPages,
+  );
+}
+
+Future<PlacedImage> _decodePlacedImage(
+  Map<String, dynamic> item, {
+  PlacedImage? source,
+}) async {
+  final encodedBytes = item['bytes']?.toString();
+  final bytes =
+      encodedBytes == null ? source?.bytes : base64Decode(encodedBytes);
+  final raster = encodedBytes == null ? source?.image : null;
+  if (bytes == null || raster == null && bytes.isEmpty) {
+    throw const FormatException('图片元素缺少数据');
+  }
+  return PlacedImage(
+    id: item['id']?.toString() ?? newPlacedImageId(),
+    name: item['name']?.toString() ?? '图片元素',
+    bytes: bytes,
+    image: raster ?? await decodeOriginalImage(bytes),
+    x: _number(item, 'x'),
+    y: _number(item, 'y'),
+    width: _number(item, 'width', 160),
+    height: _number(item, 'height', 160),
+    rotation: _number(item, 'rotation'),
+    opacity: _number(item, 'opacity', 1).clamp(0, 1),
+    fit: _enumValue(
+      PlacedImageFit.values,
+      item['fit'],
+      PlacedImageFit.contain,
+    ),
+    cropX: _number(item, 'cropX', .5).clamp(0, 1),
+    cropY: _number(item, 'cropY', .5).clamp(0, 1),
+    layer: _enumValue(
+      PlacedImageLayer.values,
+      item['layer'],
+      PlacedImageLayer.aboveBubbles,
+    ),
+    bubbleId: item['bubbleId']?.toString(),
   );
 }
 
@@ -237,21 +333,25 @@ Future<ProjectData> decodeProject(Uint8List bytes) async {
 }
 
 Future<ProjectData> decodeProjectManifest(
-  Uint8List bytes,
-  Future<Uint8List> Function(String pageId) loadImage,
-) async {
+    Uint8List bytes, Future<Uint8List> Function(String pageId) loadImage,
+    [Future<Uint8List> Function(String assetId)? loadPlacedImage]) async {
   final root = jsonDecode(utf8.decode(bytes));
   if (root is! Map<String, dynamic> ||
       root['format'] != 'bubble-caption-studio-manifest' ||
       root['schemaVersion'] != 2) {
     throw const FormatException('不是受支持的增量工程清单');
   }
-  return _decodeProjectRoot(root, loadImage: loadImage);
+  return _decodeProjectRoot(
+    root,
+    loadImage: loadImage,
+    loadPlacedImage: loadPlacedImage,
+  );
 }
 
 Future<ProjectData> _decodeProjectRoot(
   Map<String, dynamic> root, {
   Future<Uint8List> Function(String pageId)? loadImage,
+  Future<Uint8List> Function(String assetId)? loadPlacedImage,
 }) async {
   final rawPages = root['pages'];
   if (rawPages is! List || rawPages.isEmpty) {
@@ -349,6 +449,31 @@ Future<ProjectData> _decodeProjectRoot(
       }
       if (page.captions.length != page.placements.length) {
         throw FormatException('${page.name} 的字幕与气泡数量不一致');
+      }
+      for (final item in (raw['placedImages'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()) {
+        try {
+          final id = item['id']?.toString() ?? '';
+          final assetBytes =
+              item.containsKey('bytes') || loadPlacedImage == null
+                  ? null
+                  : await loadPlacedImage(id);
+          final source = item.containsKey('bytes') || loadPlacedImage == null
+              ? null
+              : PlacedImage(
+                  id: id,
+                  name: item['name']?.toString() ?? '图片元素',
+                  bytes: assetBytes!,
+                  image: await decodeOriginalImage(assetBytes),
+                  x: 0,
+                  y: 0,
+                  width: 1,
+                  height: 1,
+                );
+          page.placedImages.add(await _decodePlacedImage(item, source: source));
+        } catch (_) {
+          // Preserve the rest of an older or partially damaged project.
+        }
       }
     }
   } catch (_) {

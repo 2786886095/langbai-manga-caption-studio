@@ -103,6 +103,15 @@ Future<Uint8List> loadLocalProjectImage(String id, String pageId) async {
   return bytes;
 }
 
+Future<Uint8List> loadLocalProjectAsset(String id, String assetId) async {
+  final bytes = await _loadBridgeBytes(
+    'loadProjectAsset',
+    {'id': id, 'assetId': assetId}.jsify(),
+  );
+  if (bytes == null) throw StateError('项目图片元素不存在：$assetId');
+  return bytes;
+}
+
 Future<Uint8List?> _loadBridgeBytes(String method, JSAny? request) async =>
     _bridgeBytes(await _invokeBridgeAny(method, request));
 
@@ -114,6 +123,17 @@ Future<void> saveLocalProjectImage(
   await _invokeBridge(
     'saveProjectImage',
     {'id': id, 'pageId': pageId, 'bytes': bytes.toJS}.jsify(),
+  );
+}
+
+Future<void> saveLocalProjectAsset(
+  String id,
+  String assetId,
+  Uint8List bytes,
+) async {
+  await _invokeBridge(
+    'saveProjectAsset',
+    {'id': id, 'assetId': assetId, 'bytes': bytes.toJS}.jsify(),
   );
 }
 
