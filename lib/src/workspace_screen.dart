@@ -23,6 +23,7 @@ import 'project_codec.dart';
 import 'project_store.dart';
 import 'script_parser.dart';
 import 'settings_dialog.dart';
+import 'sticker_library.dart';
 import 'text_context_menu.dart';
 
 class _PageEditState {
@@ -30,6 +31,7 @@ class _PageEditState {
     required this.captions,
     required this.placements,
     required this.approved,
+    required this.placedImages,
   });
 
   factory _PageEditState.capture(ImagePage page) {
@@ -42,12 +44,14 @@ class _PageEditState {
           page.placements[i].copyWith(caption: captions[i]),
       ],
       approved: page.approved,
+      placedImages: [for (final image in page.placedImages) image.copyWith()],
     );
   }
 
   final List<CaptionLine> captions;
   final List<BubblePlacement> placements;
   final bool approved;
+  final List<PlacedImage> placedImages;
 
   void restore(ImagePage page) {
     final restoredCaptions =
@@ -58,6 +62,7 @@ class _PageEditState {
         for (var i = 0; i < placements.length; i++)
           placements[i].copyWith(caption: restoredCaptions[i]),
       ]
+      ..placedImages = [for (final image in placedImages) image.copyWith()]
       ..approved = approved;
   }
 }
@@ -128,7 +133,10 @@ enum _DragMode {
   bottom,
   bottomLeft,
   left,
+  rotate,
 }
+
+enum _CanvasSelection { none, bubble, image }
 
 enum _BubbleStyleProperty {
   fontFamily,
@@ -210,6 +218,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   _ProjectCheckpoint? _previousSavedCheckpoint;
   int _selectedPage = 0;
   int _selectedBubble = 0;
+  int _selectedImage = 0;
+  _CanvasSelection _canvasSelection = _CanvasSelection.none;
   bool _processing = true;
   bool _exporting = false;
   bool _saving = false;
@@ -235,6 +245,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   String? _loadingSourcePageId;
   int _sourceLoadGeneration = 0;
   int _mobileDestination = 2;
+  List<StickerAsset> _stickers = const [];
 
   static const _autoSaveDelay = Duration(seconds: 1);
   static const _autoSaveRetryDelay = Duration(seconds: 3);
@@ -250,6 +261,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     )];
   }
 
+  PlacedImage? get _placedImage {
+    final page = _page;
+    if (page == null || page.placedImages.isEmpty) return null;
+    return page
+        .placedImages[_selectedImage.clamp(0, page.placedImages.length - 1)];
+  }
+
   @override
   void initState() {
     super.initState();
@@ -257,6 +275,12 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     _projectName = widget.projectName;
     _loadStoredProject();
     _loadSettings();
+    _loadStickerAssets();
+  }
+
+  Future<void> _loadStickerAssets() async {
+    final assets = await loadStickerLibrary();
+    if (mounted) setState(() => _stickers = assets);
   }
 
   @override
@@ -530,6 +554,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
           ? await decodeProjectManifest(
               manifest,
               (pageId) => loadLocalProjectImage(widget.projectId, pageId),
+              (assetId) => loadLocalProjectAsset(widget.projectId, assetId),
             )
           : await decodeProject(legacyBytes!);
       final needsMigration =
@@ -542,7 +567,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
       var recoveredLegacyPages = 0;
       if (edits != null) {
         try {
-          final result = applyProjectEdits(edits, project.pages);
+          final result = await applyProjectEdits(edits, project.pages);
           recoveredLegacyPages = result.preservedManifestPages;
           editedScript = result.recoveredLegacyData
               ? buildBcsScript(project.pages)
@@ -660,6 +685,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   Future<void> _saveIncrementalProject() async {
     for (final page in _pages) {
       await saveLocalProjectImage(widget.projectId, page.pageId, page.bytes);
+      for (final asset in page.placedImages) {
+        await saveLocalProjectAsset(widget.projectId, asset.id, asset.bytes);
+      }
       await Future<void>.delayed(Duration.zero);
     }
     await saveLocalProjectManifest(
@@ -1143,8 +1171,21 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   void _replaceBubbleDuringDrag(BubblePlacement bubble) {
     final page = _page;
     if (page == null || page.placements.isEmpty) return;
+    final previous = page.placements[_selectedBubble];
     page.placements[_selectedBubble] = bubble;
     page.captions[_selectedBubble] = bubble.caption;
+    final scaleX = previous.width == 0 ? 1 : bubble.width / previous.width;
+    final scaleY = previous.height == 0 ? 1 : bubble.height / previous.height;
+    for (var i = 0; i < page.placedImages.length; i++) {
+      final image = page.placedImages[i];
+      if (image.bubbleId != previous.caption.bubbleId) continue;
+      page.placedImages[i] = image.copyWith(
+        x: bubble.x + (image.x - previous.x) * scaleX,
+        y: bubble.y + (image.y - previous.y) * scaleY,
+        width: image.width * scaleX,
+        height: image.height * scaleY,
+      );
+    }
     page.approved = false;
     _markDirty();
     _canvasRevision.value++;
@@ -1299,6 +1340,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
       page.captions.add(caption);
       page.placements.add(bubble);
       _selectedBubble = page.placements.length - 1;
+      _canvasSelection = _CanvasSelection.bubble;
       _selectionVisible = true;
       page.approved = false;
       _markDirty();
@@ -1307,6 +1349,597 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       _quickFeedback('已添加气泡，直接在右侧输入文字或拖动调整位置'),
     );
+  }
+
+  bool _supportedPlacedImageName(String name) =>
+      RegExp(r'\.(png|jpe?g|webp)$', caseSensitive: false).hasMatch(name);
+
+  Future<void> _addImageElement({bool insideBubble = false}) async {
+    final files = await pickImageFiles();
+    if (files == null || files.isEmpty || !mounted) return;
+    final file = files.firstWhere(
+      (item) => _supportedPlacedImageName(item.name),
+      orElse: () => files.first,
+    );
+    if (!_supportedPlacedImageName(file.name)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        _quickFeedback('图片元素仅支持 PNG、JPG 和静态 WebP'),
+      );
+      return;
+    }
+    await _insertPlacedImage(
+      name: file.name,
+      bytes: file.bytes,
+      insideBubble: insideBubble,
+    );
+  }
+
+  Future<void> _insertPlacedImage({
+    required String name,
+    required Uint8List bytes,
+    required bool insideBubble,
+  }) async {
+    final page = _page;
+    if (page == null) return;
+    final targetBubble = insideBubble ? _bubble : null;
+    if (insideBubble && targetBubble == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        _quickFeedback('请先选择一个气泡，再把图片放进气泡'),
+      );
+      return;
+    }
+    ui.Image decoded;
+    try {
+      decoded = await decodeOriginalImage(bytes);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          _quickFeedback('图片无法读取，请确认它是有效的 PNG、JPG 或静态 WebP'),
+        );
+      }
+      return;
+    }
+    if (!mounted) {
+      decoded.dispose();
+      return;
+    }
+    _remember(currentPageOnly: true);
+    final maxWidth = page.originalWidth * (insideBubble ? .22 : .28);
+    final aspect = decoded.width / decoded.height;
+    var width = maxWidth;
+    var height = width / aspect;
+    final maxHeight = page.originalHeight * (insideBubble ? .14 : .24);
+    if (height > maxHeight) {
+      height = maxHeight;
+      width = height * aspect;
+    }
+    final centerX = targetBubble?.x != null
+        ? targetBubble!.x + targetBubble.width / 2
+        : page.originalWidth / 2;
+    final centerY = targetBubble?.y != null
+        ? targetBubble!.y + targetBubble.height / 2
+        : page.originalHeight / 2;
+    final image = PlacedImage(
+      id: newPlacedImageId(),
+      name: name,
+      bytes: Uint8List.fromList(bytes),
+      image: decoded,
+      x: (centerX - width / 2).clamp(0, page.originalWidth - width),
+      y: (centerY - height / 2).clamp(0, page.originalHeight - height),
+      width: width,
+      height: height,
+      bubbleId: targetBubble?.caption.bubbleId,
+    );
+    setState(() {
+      page.placedImages.add(image);
+      _selectedImage = page.placedImages.length - 1;
+      _canvasSelection = _CanvasSelection.image;
+      _selectionVisible = true;
+      _inspectorVisible = true;
+      page.approved = false;
+      _markDirty();
+    });
+    if (supportsIncrementalProjectStorage) {
+      try {
+        await saveLocalProjectAsset(widget.projectId, image.id, image.bytes);
+      } catch (_) {
+        if (mounted) setState(() => _structureDirty = true);
+      }
+    }
+    if (!mounted) return;
+    _canvasRevision.value++;
+    ScaffoldMessenger.of(context).showSnackBar(
+      _quickFeedback(
+          insideBubble ? '图片已放入气泡，可继续移动、缩放和旋转' : '图片元素已添加，可直接在画布上调整'),
+    );
+  }
+
+  Future<String?> _askShortText({
+    required String title,
+    required String initialValue,
+    required String label,
+  }) async {
+    final controller = TextEditingController(text: initialValue);
+    try {
+      return await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: LText(title),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 40,
+            decoration: InputDecoration(labelText: tr(label)),
+            onSubmitted: (value) => Navigator.pop(
+              dialogContext,
+              value.trim(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: LText('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                controller.text.trim(),
+              ),
+              child: LText('确定'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  Future<void> _importStickers(String category) async {
+    final files = await pickImageFiles();
+    if (files == null || files.isEmpty) return;
+    final supported =
+        files.where((file) => _supportedPlacedImageName(file.name));
+    if (supported.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          _quickFeedback('表情包库仅支持 PNG、JPG 和静态 WebP'),
+        );
+      }
+      return;
+    }
+    final now = DateTime.now().toUtc();
+    final additions = [
+      for (final file in supported)
+        StickerAsset(
+          id: 'sticker-${now.microsecondsSinceEpoch}-${file.name.hashCode}',
+          name: file.name.replaceFirst(RegExp(r'\.[^.]+$'), ''),
+          category: category.isEmpty ? '未分类' : category,
+          bytes: Uint8List.fromList(file.bytes),
+          createdAt: now,
+        ),
+    ];
+    setState(() => _stickers = [...additions, ..._stickers]);
+    await saveStickerLibrary(_stickers);
+  }
+
+  Future<void> _showStickerLibrary() async {
+    var query = '';
+    var category = '全部';
+    final search = TextEditingController();
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            final categories = <String>{
+              '全部',
+              '最近使用',
+              '收藏',
+              ..._stickers.map((asset) => asset.category),
+            }.toList();
+            final filtered = _stickers.where((asset) {
+              final queryMatches = query.isEmpty ||
+                  asset.name.toLowerCase().contains(query.toLowerCase()) ||
+                  asset.category.toLowerCase().contains(query.toLowerCase());
+              final categoryMatches = switch (category) {
+                '全部' => true,
+                '最近使用' => asset.lastUsedAt != null,
+                '收藏' => asset.favorite,
+                _ => asset.category == category,
+              };
+              return queryMatches && categoryMatches;
+            }).toList()
+              ..sort((a, b) {
+                if (category == '最近使用') {
+                  return (b.lastUsedAt ??
+                          DateTime.fromMillisecondsSinceEpoch(0))
+                      .compareTo(a.lastUsedAt ??
+                          DateTime.fromMillisecondsSinceEpoch(0));
+                }
+                return b.createdAt.compareTo(a.createdAt);
+              });
+
+            Future<void> persist() => saveStickerLibrary(_stickers);
+
+            Future<void> useAsset(StickerAsset asset, bool insideBubble) async {
+              final used = asset.copyWith(lastUsedAt: DateTime.now().toUtc());
+              setState(() {
+                _stickers = [
+                  for (final item in _stickers)
+                    item.id == asset.id ? used : item,
+                ];
+              });
+              await persist();
+              if (!dialogContext.mounted || !mounted) return;
+              Navigator.pop(dialogContext);
+              await _insertPlacedImage(
+                name: asset.name,
+                bytes: asset.bytes,
+                insideBubble: insideBubble,
+              );
+            }
+
+            final size = workspaceDialogContentSize(
+              MediaQuery.sizeOf(context),
+              maxWidth: 860,
+              maxHeight: 680,
+            );
+            return AlertDialog(
+              title: Row(
+                children: [
+                  const Icon(Icons.emoji_emotions_outlined),
+                  const SizedBox(width: 10),
+                  Expanded(child: LText('全局表情包库')),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      var targetCategory = category;
+                      if (const {'全部', '最近使用', '收藏'}.contains(targetCategory)) {
+                        targetCategory = '未分类';
+                      }
+                      await _importStickers(targetCategory);
+                      if (dialogContext.mounted) setDialogState(() {});
+                    },
+                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                    label: LText('加入表情包'),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: size.width,
+                height: size.height,
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: search,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search),
+                        hintText: tr('搜索名称或分类'),
+                        suffixIcon: query.isEmpty
+                            ? null
+                            : IconButton(
+                                onPressed: () {
+                                  search.clear();
+                                  setDialogState(() => query = '');
+                                },
+                                icon: const Icon(Icons.close),
+                              ),
+                      ),
+                      onChanged: (value) => setDialogState(() => query = value),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 42,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: categories.length + 1,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) {
+                          if (index == categories.length) {
+                            return ActionChip(
+                              avatar: const Icon(
+                                  Icons.create_new_folder_outlined,
+                                  size: 18),
+                              label: LText('新建分类'),
+                              onPressed: () async {
+                                final value = await _askShortText(
+                                  title: '新建表情包分类',
+                                  initialValue: '',
+                                  label: '分类名称',
+                                );
+                                if (value != null &&
+                                    value.isNotEmpty &&
+                                    dialogContext.mounted) {
+                                  setDialogState(() => category = value);
+                                }
+                              },
+                            );
+                          }
+                          final item = categories[index];
+                          return FilterChip(
+                            label: LText(item),
+                            selected: category == item,
+                            onSelected: (_) =>
+                                setDialogState(() => category = item),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.photo_library_outlined,
+                                      size: 52, color: AppColors.muted),
+                                  const SizedBox(height: 10),
+                                  LText(query.isEmpty
+                                      ? '表情包库还是空的，点击右上角加入图片'
+                                      : '没有找到匹配的表情包'),
+                                ],
+                              ),
+                            )
+                          : GridView.builder(
+                              gridDelegate:
+                                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 180,
+                                mainAxisExtent: 205,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                              ),
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) {
+                                final asset = filtered[index];
+                                return Card(
+                                  clipBehavior: Clip.antiAlias,
+                                  child: InkWell(
+                                    onTap: () => useAsset(asset, false),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Expanded(
+                                          child: ColoredBox(
+                                            color: AppColors.canvas,
+                                            child: Image.memory(
+                                              asset.bytes,
+                                              fit: BoxFit.contain,
+                                              gaplessPlayback: true,
+                                              errorBuilder: (_, __, ___) =>
+                                                  const Icon(
+                                                Icons.broken_image_outlined,
+                                                color: AppColors.muted,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                              9, 7, 5, 3),
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  asset.name,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w700),
+                                                ),
+                                              ),
+                                              IconButton(
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                tooltip: tr(asset.favorite
+                                                    ? '取消收藏'
+                                                    : '收藏'),
+                                                onPressed: () async {
+                                                  setState(() {
+                                                    _stickers = [
+                                                      for (final item
+                                                          in _stickers)
+                                                        item.id == asset.id
+                                                            ? item.copyWith(
+                                                                favorite: !item
+                                                                    .favorite)
+                                                            : item,
+                                                    ];
+                                                  });
+                                                  await persist();
+                                                  if (dialogContext.mounted) {
+                                                    setDialogState(() {});
+                                                  }
+                                                },
+                                                icon: Icon(
+                                                  asset.favorite
+                                                      ? Icons.star
+                                                      : Icons.star_border,
+                                                  color: asset.favorite
+                                                      ? AppColors.warning
+                                                      : AppColors.muted,
+                                                ),
+                                              ),
+                                              PopupMenuButton<String>(
+                                                tooltip: tr('更多操作'),
+                                                onSelected: (value) async {
+                                                  if (value == 'bubble') {
+                                                    await useAsset(asset, true);
+                                                    return;
+                                                  }
+                                                  if (value == 'rename') {
+                                                    final name =
+                                                        await _askShortText(
+                                                      title: '重命名表情包',
+                                                      initialValue: asset.name,
+                                                      label: '表情包名称',
+                                                    );
+                                                    if (name != null &&
+                                                        name.isNotEmpty) {
+                                                      setState(() {
+                                                        _stickers = [
+                                                          for (final item
+                                                              in _stickers)
+                                                            item.id == asset.id
+                                                                ? item.copyWith(
+                                                                    name: name)
+                                                                : item,
+                                                        ];
+                                                      });
+                                                    }
+                                                  } else if (value ==
+                                                      'category') {
+                                                    final value =
+                                                        await _askShortText(
+                                                      title: '修改分类',
+                                                      initialValue:
+                                                          asset.category,
+                                                      label: '分类名称',
+                                                    );
+                                                    if (value != null &&
+                                                        value.isNotEmpty) {
+                                                      setState(() {
+                                                        _stickers = [
+                                                          for (final item
+                                                              in _stickers)
+                                                            item.id == asset.id
+                                                                ? item.copyWith(
+                                                                    category:
+                                                                        value)
+                                                                : item,
+                                                        ];
+                                                      });
+                                                    }
+                                                  } else if (value ==
+                                                      'delete') {
+                                                    setState(() {
+                                                      _stickers = [
+                                                        for (final item
+                                                            in _stickers)
+                                                          if (item.id !=
+                                                              asset.id)
+                                                            item,
+                                                      ];
+                                                    });
+                                                  }
+                                                  await persist();
+                                                  if (dialogContext.mounted) {
+                                                    setDialogState(() {});
+                                                  }
+                                                },
+                                                itemBuilder: (_) => [
+                                                  PopupMenuItem(
+                                                    value: 'bubble',
+                                                    enabled: _bubble != null,
+                                                    child: LText('放进当前气泡'),
+                                                  ),
+                                                  PopupMenuItem(
+                                                      value: 'rename',
+                                                      child: LText('重命名')),
+                                                  PopupMenuItem(
+                                                      value: 'category',
+                                                      child: LText('修改分类')),
+                                                  PopupMenuItem(
+                                                      value: 'delete',
+                                                      child: LText('从库中删除')),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                              9, 0, 9, 8),
+                                          child: Text(
+                                            asset.category,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                color: AppColors.muted),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: LText('关闭'),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    } finally {
+      search.dispose();
+    }
+  }
+
+  void _replacePlacedImage(PlacedImage image, {bool remember = false}) {
+    final page = _page;
+    if (page == null || page.placedImages.isEmpty) return;
+    if (remember) _remember(currentPageOnly: true);
+    setState(() {
+      page.placedImages[_selectedImage] = image;
+      page.approved = false;
+      _markDirty();
+    });
+    _canvasRevision.value++;
+  }
+
+  void _replacePlacedImageDuringDrag(PlacedImage image) {
+    final page = _page;
+    if (page == null || page.placedImages.isEmpty) return;
+    page.placedImages[_selectedImage] = image;
+    page.approved = false;
+    _markDirty();
+    _canvasRevision.value++;
+  }
+
+  void _deletePlacedImage() {
+    final page = _page;
+    final image = _placedImage;
+    if (page == null || image == null) return;
+    _remember(currentPageOnly: true);
+    setState(() {
+      page.placedImages.removeAt(_selectedImage);
+      _selectedImage = page.placedImages.isEmpty
+          ? 0
+          : _selectedImage.clamp(0, page.placedImages.length - 1);
+      _canvasSelection = _CanvasSelection.none;
+      _selectionVisible = false;
+      page.approved = false;
+      _markDirty();
+    });
+    _canvasRevision.value++;
+  }
+
+  void _movePlacedImageLayer(int delta) {
+    final page = _page;
+    if (page == null || page.placedImages.length < 2) return;
+    final target =
+        (_selectedImage + delta).clamp(0, page.placedImages.length - 1);
+    if (target == _selectedImage) return;
+    _remember(currentPageOnly: true);
+    setState(() {
+      final image = page.placedImages.removeAt(_selectedImage);
+      page.placedImages.insert(target, image);
+      _selectedImage = target;
+      _markDirty();
+    });
+    _canvasRevision.value++;
   }
 
   void _duplicateBubble() {
@@ -1337,13 +1970,21 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     final page = _page;
     if (page == null || page.placements.isEmpty) return;
     _remember(currentPageOnly: true);
+    final removedBubbleId = page.placements[_selectedBubble].caption.bubbleId;
     setState(() {
       page.placements.removeAt(_selectedBubble);
       page.captions.removeAt(_selectedBubble);
+      page.placedImages = [
+        for (final image in page.placedImages)
+          image.bubbleId == removedBubbleId
+              ? image.copyWith(bubbleId: null)
+              : image,
+      ];
       _selectedBubble = page.placements.isEmpty
           ? 0
           : _selectedBubble.clamp(0, page.placements.length - 1);
       _selectionVisible = false;
+      _canvasSelection = _CanvasSelection.none;
       page.approved = false;
       _markDirty();
     });
@@ -1373,6 +2014,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     setState(() {
       _selectedPage = index;
       _selectedBubble = 0;
+      _selectedImage = 0;
+      _canvasSelection = _CanvasSelection.none;
       _selectionVisible = false;
       _undoStack.clear();
       _redoStack.clear();
@@ -2590,7 +3233,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                   ),
                 ],
               ),
-              child: _inspector(),
+              child: _canvasSelection == _CanvasSelection.image
+                  ? _imageInspector()
+                  : _inspector(),
             ),
           ],
         ],
@@ -2614,7 +3259,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
               const VerticalDivider(width: 1),
               SizedBox(
                 width: inspectorWidth,
-                child: _inspector(compact: true, allowClose: false),
+                child: _canvasSelection == _CanvasSelection.image
+                    ? _imageInspector(compact: true, allowClose: false)
+                    : _inspector(compact: true, allowClose: false),
               ),
             ],
           );
@@ -2692,9 +3339,12 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
       );
 
   Future<void> _showMobileInspectorSheet() {
-    if (_bubble == null) {
+    final hasSelection = (_canvasSelection == _CanvasSelection.bubble &&
+            _bubble != null) ||
+        (_canvasSelection == _CanvasSelection.image && _placedImage != null);
+    if (!hasSelection) {
       ScaffoldMessenger.of(context).showSnackBar(
-        _quickFeedback('请先点击一个气泡，再打开属性'),
+        _quickFeedback('请先点击一个气泡或图片元素，再打开属性'),
       );
       return Future.value();
     }
@@ -2709,11 +3359,17 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
         maxChildSize: .96,
         expand: false,
         builder: (context, controller) => _mobileSheet(
-          child: _inspector(
-            compact: true,
-            controller: controller,
-            onClose: () => Navigator.pop(sheetContext),
-          ),
+          child: _canvasSelection == _CanvasSelection.image
+              ? _imageInspector(
+                  compact: true,
+                  controller: controller,
+                  onClose: () => Navigator.pop(sheetContext),
+                )
+              : _inspector(
+                  compact: true,
+                  controller: controller,
+                  onClose: () => Navigator.pop(sheetContext),
+                ),
         ),
       ),
     );
@@ -3182,9 +3838,37 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                 foregroundColor: Colors.white,
               ),
             ),
+            PopupMenuButton<String>(
+              tooltip: tr('添加图片元素'),
+              icon: const Icon(Icons.add_photo_alternate_outlined, size: 19),
+              onSelected: (value) {
+                switch (value) {
+                  case 'free':
+                    _addImageElement();
+                  case 'bubble':
+                    _addImageElement(insideBubble: true);
+                  case 'library':
+                    _showStickerLibrary();
+                }
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'free', child: LText('添加独立图片')),
+                PopupMenuItem(
+                  value: 'bubble',
+                  enabled: _bubble != null,
+                  child: LText('图片放进气泡'),
+                ),
+                PopupMenuItem(value: 'library', child: LText('打开表情包库')),
+              ],
+            ),
             IconButton(
-              onPressed: _bubble == null ? null : _showMobileInspectorSheet,
-              tooltip: tr('气泡属性'),
+              onPressed: (_canvasSelection == _CanvasSelection.bubble &&
+                          _bubble != null) ||
+                      (_canvasSelection == _CanvasSelection.image &&
+                          _placedImage != null)
+                  ? _showMobileInspectorSheet
+                  : null,
+              tooltip: tr('元素属性'),
               icon: const Icon(Icons.tune, size: 19),
             ),
           ],
@@ -3280,6 +3964,48 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                     ),
                   ),
                   const SizedBox(width: 4),
+                  PopupMenuButton<String>(
+                    tooltip: tr('添加图片元素'),
+                    icon: const Icon(Icons.add_photo_alternate_outlined,
+                        size: 21),
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'free':
+                          _addImageElement();
+                        case 'bubble':
+                          _addImageElement(insideBubble: true);
+                        case 'library':
+                          _showStickerLibrary();
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: 'free',
+                        child: ListTile(
+                          leading: const Icon(Icons.image_outlined),
+                          title: LText('添加独立图片'),
+                          dense: true,
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'bubble',
+                        enabled: _bubble != null,
+                        child: ListTile(
+                          leading: const Icon(Icons.bubble_chart_outlined),
+                          title: LText('图片放进当前气泡'),
+                          dense: true,
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'library',
+                        child: ListTile(
+                          leading: const Icon(Icons.emoji_emotions_outlined),
+                          title: LText('全局表情包库'),
+                          dense: true,
+                        ),
+                      ),
+                    ],
+                  ),
                   PopupMenuButton<String>(
                     tooltip: tr('气泡编辑命令'),
                     icon: const Icon(Icons.edit_note, size: 21),
@@ -3397,6 +4123,11 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                   return hitTestBubble(page.placements, point);
                 }
 
+                int hitTestImage(Offset local) {
+                  final point = Offset(local.dx / sx, local.dy / sy);
+                  return hitTestPlacedImage(page.placedImages, point);
+                }
+
                 _DragMode? hitHandle(Offset local, BubblePlacement bubble) {
                   final point = Offset(local.dx / sx, local.dy / sy);
                   final rect = Rect.fromLTWH(
@@ -3426,9 +4157,73 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                   return null;
                 }
 
-                (int, _DragMode)? interactionAt(Offset local) {
+                _DragMode? hitImageHandle(Offset local, PlacedImage image) {
+                  final point = Offset(local.dx / sx, local.dy / sy);
+                  final center = Offset(
+                    image.x + image.width / 2,
+                    image.y + image.height / 2,
+                  );
+                  final translated = point - center;
+                  final cosine = math.cos(-image.rotation);
+                  final sine = math.sin(-image.rotation);
+                  final rotated = Offset(
+                        translated.dx * cosine - translated.dy * sine,
+                        translated.dx * sine + translated.dy * cosine,
+                      ) +
+                      center;
+                  final rect = Rect.fromLTWH(
+                    image.x,
+                    image.y,
+                    image.width,
+                    image.height,
+                  );
+                  final scale = (sx + sy) / 2;
+                  final radius = 22 / scale;
+                  if ((rotated - Offset(rect.center.dx, rect.top - 30 / scale))
+                          .distance <=
+                      radius) {
+                    return _DragMode.rotate;
+                  }
+                  final handles = bubbleResizeHandles(rect);
+                  const modes = [
+                    _DragMode.topLeft,
+                    _DragMode.top,
+                    _DragMode.topRight,
+                    _DragMode.right,
+                    _DragMode.bottomRight,
+                    _DragMode.bottom,
+                    _DragMode.bottomLeft,
+                    _DragMode.left,
+                  ];
+                  for (var i = 0; i < handles.length; i++) {
+                    if ((rotated - handles[i]).distance <= radius) {
+                      return modes[i];
+                    }
+                  }
+                  return null;
+                }
+
+                (_CanvasSelection, int, _DragMode)? interactionAt(
+                    Offset local) {
                   if (!_showRendered) return null;
                   if (_selectionVisible &&
+                      _canvasSelection == _CanvasSelection.image &&
+                      page.placedImages.isNotEmpty &&
+                      _selectedImage < page.placedImages.length) {
+                    final selectedMode = hitImageHandle(
+                      local,
+                      page.placedImages[_selectedImage],
+                    );
+                    if (selectedMode != null) {
+                      return (
+                        _CanvasSelection.image,
+                        _selectedImage,
+                        selectedMode,
+                      );
+                    }
+                  }
+                  if (_selectionVisible &&
+                      _canvasSelection == _CanvasSelection.bubble &&
                       page.placements.isNotEmpty &&
                       _selectedBubble < page.placements.length) {
                     final selectedMode = hitHandle(
@@ -3436,34 +4231,54 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                       page.placements[_selectedBubble],
                     );
                     if (selectedMode != null) {
-                      return (_selectedBubble, selectedMode);
+                      return (
+                        _CanvasSelection.bubble,
+                        _selectedBubble,
+                        selectedMode,
+                      );
                     }
+                  }
+                  final imageIndex = hitTestImage(local);
+                  if (imageIndex >= 0) {
+                    return (
+                      _CanvasSelection.image,
+                      imageIndex,
+                      hitImageHandle(local, page.placedImages[imageIndex]) ??
+                          _DragMode.move,
+                    );
                   }
                   final index = hitTest(local);
                   if (index < 0) return null;
                   return (
+                    _CanvasSelection.bubble,
                     index,
                     hitHandle(local, page.placements[index]) ?? _DragMode.move,
                   );
                 }
 
                 void applyPointerSelection(
-                  (int, _DragMode)? interaction, {
+                  (_CanvasSelection, int, _DragMode)? interaction, {
                   bool beginDrag = false,
                 }) {
                   setState(() {
                     if (interaction == null) {
                       _selectionVisible = false;
+                      _canvasSelection = _CanvasSelection.none;
                       _dragMode = null;
                       _hoverMode = null;
                       return;
                     }
-                    _selectedBubble = interaction.$1;
+                    _canvasSelection = interaction.$1;
+                    if (interaction.$1 == _CanvasSelection.bubble) {
+                      _selectedBubble = interaction.$2;
+                    } else {
+                      _selectedImage = interaction.$2;
+                    }
                     _selectionVisible = true;
                     _inspectorVisible = true;
                     if (beginDrag) {
-                      _dragMode = interaction.$2;
-                      _hoverMode = interaction.$2;
+                      _dragMode = interaction.$3;
+                      _hoverMode = interaction.$3;
                     }
                   });
                   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -3485,6 +4300,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                       _DragMode.right =>
                         SystemMouseCursors.resizeLeftRight,
                       _DragMode.move => SystemMouseCursors.move,
+                      _DragMode.rotate => SystemMouseCursors.grab,
                       null => SystemMouseCursors.basic,
                     };
 
@@ -3496,7 +4312,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                       cursor: cursorFor(_dragMode ?? _hoverMode),
                       onHover: (event) {
                         if (_dragMode != null) return;
-                        final mode = interactionAt(event.localPosition)?.$2;
+                        final mode = interactionAt(event.localPosition)?.$3;
                         if (mode != _hoverMode) {
                           setState(() => _hoverMode = mode);
                         }
@@ -3533,11 +4349,103 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                             _remember(currentPageOnly: true);
                           },
                           onPanUpdate: (details) {
-                            final b = _bubble;
                             final mode = _dragMode;
-                            if (b == null || mode == null) return;
+                            if (mode == null) return;
                             final dx = details.delta.dx / sx;
                             final dy = details.delta.dy / sy;
+                            if (_canvasSelection == _CanvasSelection.image) {
+                              final image = _placedImage;
+                              if (image == null) return;
+                              if (mode == _DragMode.rotate) {
+                                final center = Offset(
+                                  image.x + image.width / 2,
+                                  image.y + image.height / 2,
+                                );
+                                final point = Offset(
+                                  details.localPosition.dx / sx,
+                                  details.localPosition.dy / sy,
+                                );
+                                _replacePlacedImageDuringDrag(
+                                  image.copyWith(
+                                    rotation: math.atan2(
+                                          point.dy - center.dy,
+                                          point.dx - center.dx,
+                                        ) +
+                                        math.pi / 2,
+                                  ),
+                                );
+                                return;
+                              }
+                              const minimum = 24.0;
+                              var left = image.x;
+                              var top = image.y;
+                              var right = image.x + image.width;
+                              var bottom = image.y + image.height;
+                              switch (mode) {
+                                case _DragMode.move:
+                                  left = (left + dx).clamp(
+                                    0,
+                                    page.originalWidth - image.width,
+                                  );
+                                  top = (top + dy).clamp(
+                                    0,
+                                    page.originalHeight - image.height,
+                                  );
+                                  right = left + image.width;
+                                  bottom = top + image.height;
+                                case _DragMode.topLeft:
+                                  left = (left + dx).clamp(0, right - minimum);
+                                  top = (top + dy).clamp(0, bottom - minimum);
+                                case _DragMode.top:
+                                  top = (top + dy).clamp(0, bottom - minimum);
+                                case _DragMode.topRight:
+                                  right = (right + dx).clamp(
+                                    left + minimum,
+                                    page.originalWidth.toDouble(),
+                                  );
+                                  top = (top + dy).clamp(0, bottom - minimum);
+                                case _DragMode.right:
+                                  right = (right + dx).clamp(
+                                    left + minimum,
+                                    page.originalWidth.toDouble(),
+                                  );
+                                case _DragMode.bottomRight:
+                                  right = (right + dx).clamp(
+                                    left + minimum,
+                                    page.originalWidth.toDouble(),
+                                  );
+                                  bottom = (bottom + dy).clamp(
+                                    top + minimum,
+                                    page.originalHeight.toDouble(),
+                                  );
+                                case _DragMode.bottom:
+                                  bottom = (bottom + dy).clamp(
+                                    top + minimum,
+                                    page.originalHeight.toDouble(),
+                                  );
+                                case _DragMode.bottomLeft:
+                                  left = (left + dx).clamp(0, right - minimum);
+                                  bottom = (bottom + dy).clamp(
+                                    top + minimum,
+                                    page.originalHeight.toDouble(),
+                                  );
+                                case _DragMode.left:
+                                  left = (left + dx).clamp(0, right - minimum);
+                                case _DragMode.rotate:
+                                  return;
+                              }
+                              _replacePlacedImageDuringDrag(
+                                image.copyWith(
+                                  x: left,
+                                  y: top,
+                                  width: right - left,
+                                  height: bottom - top,
+                                ),
+                              );
+                              return;
+                            }
+                            final b = _bubble;
+                            if (b == null) return;
                             const minWidth = 80.0;
                             const minHeight = 56.0;
                             var left = b.x;
@@ -3594,6 +4502,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                                 );
                               case _DragMode.left:
                                 left = (left + dx).clamp(0, right - minWidth);
+                              case _DragMode.rotate:
+                                return;
                             }
                             _replaceBubbleDuringDrag(
                               b.copyWith(
@@ -3622,6 +4532,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                                     key: ValueKey((
                                       page.pageId,
                                       _selectionVisible ? _selectedBubble : -1,
+                                      _canvasSelection,
+                                      _selectionVisible ? _selectedImage : -1,
                                     )),
                                     painter: PagePainter(
                                       page: page,
@@ -3633,9 +4545,18 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                                       repaint: _canvasRevision,
                                       selectedIndex: !_showRendered ||
                                               !_selectionVisible ||
+                                              _canvasSelection !=
+                                                  _CanvasSelection.bubble ||
                                               page.placements.isEmpty
                                           ? null
                                           : _selectedBubble,
+                                      selectedImageIndex: !_showRendered ||
+                                              !_selectionVisible ||
+                                              _canvasSelection !=
+                                                  _CanvasSelection.image ||
+                                              page.placedImages.isEmpty
+                                          ? null
+                                          : _selectedImage,
                                     ),
                                   ),
                                 ),
@@ -4141,6 +5062,241 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                 ),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _imageInspector({
+    bool compact = false,
+    ScrollController? controller,
+    VoidCallback? onClose,
+    bool allowClose = true,
+  }) {
+    final image = _placedImage;
+    final page = _page;
+    if (image == null || page == null) {
+      return ColoredBox(
+        color: AppColors.panel,
+        child: Center(child: LText('请先选择一个图片元素')),
+      );
+    }
+    final bubbleIds = {
+      for (final bubble in page.placements) bubble.caption.bubbleId
+    };
+    final binding = bubbleIds.contains(image.bubbleId) ? image.bubbleId : null;
+    Widget sliderRow(
+      String label,
+      double value,
+      double min,
+      double max,
+      ValueChanged<double> changed, {
+      String Function(double)? formatter,
+    }) =>
+        Row(
+          children: [
+            SizedBox(
+              width: 76,
+              child: LText(
+                label,
+                style:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+            ),
+            Expanded(
+              child: Slider(
+                value: value.clamp(min, max),
+                min: min,
+                max: max,
+                onChangeStart: (_) => _remember(currentPageOnly: true),
+                onChanged: changed,
+              ),
+            ),
+            SizedBox(
+              width: 48,
+              child: Text(
+                formatter?.call(value) ?? value.toStringAsFixed(0),
+                textAlign: TextAlign.right,
+                style: const TextStyle(fontSize: 11),
+              ),
+            ),
+          ],
+        );
+    return ColoredBox(
+      color: AppColors.panel,
+      child: SingleChildScrollView(
+        controller: controller,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.image_outlined, color: AppColors.pink),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: LText(
+                    '图片属性',
+                    style: const TextStyle(
+                        fontSize: 17, fontWeight: FontWeight.w800),
+                  ),
+                ),
+                if (allowClose)
+                  IconButton(
+                    onPressed: onClose ??
+                        () => setState(() => _inspectorVisible = false),
+                    tooltip: tr('关闭属性面板'),
+                    icon: const Icon(Icons.close),
+                  ),
+              ],
+            ),
+            Text(
+              image.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, color: AppColors.muted),
+            ),
+            const SizedBox(height: 14),
+            AspectRatio(
+              aspectRatio: 2.4,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: AppColors.canvas,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.line),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(9),
+                  child: RawImage(image: image.image, fit: BoxFit.contain),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            LText('显示方式',
+                style:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            SegmentedButton<PlacedImageFit>(
+              segments: const [
+                ButtonSegment(
+                  value: PlacedImageFit.contain,
+                  icon: Icon(Icons.fit_screen),
+                  label: Text('完整显示'),
+                ),
+                ButtonSegment(
+                  value: PlacedImageFit.cover,
+                  icon: Icon(Icons.crop),
+                  label: Text('铺满裁剪'),
+                ),
+              ],
+              selected: {image.fit},
+              onSelectionChanged: (value) => _replacePlacedImage(
+                  image.copyWith(fit: value.first),
+                  remember: true),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String?>(
+              value: binding,
+              decoration: InputDecoration(labelText: tr('放置方式')),
+              items: [
+                DropdownMenuItem<String?>(
+                    value: null, child: LText('独立图片，不裁剪')),
+                for (var i = 0; i < page.placements.length; i++)
+                  DropdownMenuItem<String?>(
+                    value: page.placements[i].caption.bubbleId,
+                    child: LText('放入气泡 ${i + 1}'),
+                  ),
+              ],
+              onChanged: (value) => _replacePlacedImage(
+                  image.copyWith(bubbleId: value),
+                  remember: true),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<PlacedImageLayer>(
+              value: image.layer,
+              decoration: InputDecoration(labelText: tr('图片层级')),
+              items: const [
+                DropdownMenuItem(
+                  value: PlacedImageLayer.behindBubbles,
+                  child: Text('文字和气泡下方'),
+                ),
+                DropdownMenuItem(
+                  value: PlacedImageLayer.aboveBubbles,
+                  child: Text('文字和气泡上方'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  _replacePlacedImage(image.copyWith(layer: value),
+                      remember: true);
+                }
+              },
+            ),
+            const SizedBox(height: 10),
+            sliderRow(
+              '透明度',
+              image.opacity,
+              0,
+              1,
+              (value) => _replacePlacedImage(image.copyWith(opacity: value)),
+              formatter: (value) => '${(value * 100).round()}%',
+            ),
+            sliderRow(
+              '旋转',
+              image.rotation,
+              -math.pi,
+              math.pi,
+              (value) => _replacePlacedImage(image.copyWith(rotation: value)),
+              formatter: (value) => '${(value * 180 / math.pi).round()}°',
+            ),
+            if (image.fit == PlacedImageFit.cover) ...[
+              sliderRow(
+                '水平裁剪',
+                image.cropX,
+                0,
+                1,
+                (value) => _replacePlacedImage(image.copyWith(cropX: value)),
+                formatter: (value) => '${(value * 100).round()}%',
+              ),
+              sliderRow(
+                '垂直裁剪',
+                image.cropY,
+                0,
+                1,
+                (value) => _replacePlacedImage(image.copyWith(cropY: value)),
+                formatter: (value) => '${(value * 100).round()}%',
+              ),
+            ],
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _movePlacedImageLayer(-1),
+                    icon: const Icon(Icons.flip_to_back_outlined),
+                    label: LText('下移一层'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _movePlacedImageLayer(1),
+                    icon: const Icon(Icons.flip_to_front_outlined),
+                    label: LText('上移一层'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _deletePlacedImage,
+                icon: const Icon(Icons.delete_outline),
+                label: LText('删除图片元素'),
+              ),
+            ),
           ],
         ),
       ),

@@ -1296,6 +1296,70 @@ const _workspaceTranslations = <String, Map<String, String>>{
     'ko': '최근 저장으로 되돌리기',
     'zh_TW': '回退到最近儲存'
   },
+  '添加图片元素': {
+    'en': 'Add image element',
+    'ja': '画像要素を追加',
+    'ko': '이미지 요소 추가',
+    'zh_TW': '加入圖片元素'
+  },
+  '添加独立图片': {
+    'en': 'Add standalone image',
+    'ja': '独立画像を追加',
+    'ko': '독립 이미지 추가',
+    'zh_TW': '加入獨立圖片'
+  },
+  '图片放进当前气泡': {
+    'en': 'Place image in current bubble',
+    'ja': '現在の吹き出しに画像を入れる',
+    'ko': '현재 말풍선에 이미지 넣기',
+    'zh_TW': '將圖片放入目前氣泡'
+  },
+  '全局表情包库': {
+    'en': 'Global sticker library',
+    'ja': '共通スタンプライブラリ',
+    'ko': '전역 스티커 라이브러리',
+    'zh_TW': '全域表情包庫'
+  },
+  '加入表情包': {
+    'en': 'Add stickers',
+    'ja': 'スタンプを追加',
+    'ko': '스티커 추가',
+    'zh_TW': '加入表情包'
+  },
+  '搜索名称或分类': {
+    'en': 'Search name or category',
+    'ja': '名前またはカテゴリを検索',
+    'ko': '이름 또는 분류 검색',
+    'zh_TW': '搜尋名稱或分類'
+  },
+  '图片属性': {
+    'en': 'Image properties',
+    'ja': '画像の設定',
+    'ko': '이미지 속성',
+    'zh_TW': '圖片屬性'
+  },
+  '完整显示': {'en': 'Fit image', 'ja': '全体を表示', 'ko': '전체 표시', 'zh_TW': '完整顯示'},
+  '铺满裁剪': {
+    'en': 'Fill and crop',
+    'ja': '塗りつぶして切り抜く',
+    'ko': '채우기 및 자르기',
+    'zh_TW': '鋪滿裁切'
+  },
+  '放置方式': {'en': 'Placement', 'ja': '配置方法', 'ko': '배치 방식', 'zh_TW': '放置方式'},
+  '图片层级': {
+    'en': 'Image layer',
+    'ja': '画像レイヤー',
+    'ko': '이미지 레이어',
+    'zh_TW': '圖片圖層'
+  },
+  '透明度': {'en': 'Opacity', 'ja': '不透明度', 'ko': '불투명도', 'zh_TW': '透明度'},
+  '旋转': {'en': 'Rotation', 'ja': '回転', 'ko': '회전', 'zh_TW': '旋轉'},
+  '元素属性': {
+    'en': 'Element properties',
+    'ja': '要素の設定',
+    'ko': '요소 속성',
+    'zh_TW': '元素屬性'
+  },
   '旁白框 · 纯黑直角框，无尾巴': {
     'en': 'Narration · black square-corner frame, no tail',
     'ja': 'ナレーション · 黒い直角枠、しっぽなし',

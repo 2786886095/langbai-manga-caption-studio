@@ -55,12 +55,22 @@ Future<Uint8List?> loadLocalProjectManifest(String id) =>
 Future<Uint8List> loadLocalProjectImage(String id, String pageId) =>
     implementation.loadLocalProjectImage(id, pageId);
 
+Future<Uint8List> loadLocalProjectAsset(String id, String assetId) =>
+    implementation.loadLocalProjectAsset(id, assetId);
+
 Future<void> saveLocalProjectImage(
   String id,
   String pageId,
   Uint8List bytes,
 ) =>
     implementation.saveLocalProjectImage(id, pageId, bytes);
+
+Future<void> saveLocalProjectAsset(
+  String id,
+  String assetId,
+  Uint8List bytes,
+) =>
+    implementation.saveLocalProjectAsset(id, assetId, bytes);
 
 Future<void> saveLocalProjectManifest(
   String id,
