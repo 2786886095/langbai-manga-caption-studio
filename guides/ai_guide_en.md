@@ -19,7 +19,7 @@ BCS field names and enum values are protocol tokens. Keep them exactly as shown 
 - Header: `@格式=BCS顺序字幕脚本`, `@版本=2`, `@坐标单位=px`
 - Image section: `[图片 N]`, `@原文件名`, `@原图尺寸`
 - Bubble fields: `@气泡ID`, `@矩形`, `@尾巴`, `@气泡`, `@字体`, `@字号`, `@颜色`, `@行距`, `@描边`, `@白底透明度`
-- Bubble types: `对话气泡`, `心理气泡`, `旁白框`, `耳语气泡`, `惊喊气泡`
+- Bubble types: `对话气泡`, `心理气泡`, `旁白框`, `耳语气泡`, `惊喊气泡`, `纯文字`
 - Tail values: `左上`, `右上`, `左下`, `右下`
 
 Bubble body text may use any language.
@@ -44,7 +44,7 @@ Write natural, speakable dialogue appropriate to identity and situation. Charact
 Narration must accurately add information the image cannot show: time, location change, resources, front-line change, off-screen knowledge, or causality. It may be denser than dialogue, but must not merely restate visible actions. Do not use narrator jokes, cute object personification, rhetorical questions, or twist punchlines.
 
 [VISIBLE TEXT]
-Bubble body lines contain only the actual published text. Never include speaker names, “Narration:”, “Thought:”, image numbers, shot labels, bubble types, or editing notes. Speaker identity must be conveyed by position, bubble style, voice, and fixed text color.
+Bubble body lines contain only the actual published text. Never include speaker names, “Narration:”, “Thought:”, image numbers, shot labels, bubble types, or editing notes. Speaker identity must be conveyed by position, bubble style, voice, and fixed text color. Preserve colons that belong to the published sentence, including all text before and after them.
 
 [BUBBLE TYPES]
 Use only the exact Chinese protocol values after `@气泡=`:
@@ -53,10 +53,11 @@ Use only the exact Chinese protocol values after `@气泡=`:
 旁白框 = narration or device/off-screen broadcast; no visible tail
 耳语气泡 = whisper, weak voice, or close speech
 惊喊气泡 = shout, shock, or intense emotion
-For `旁白框`, still supply any legal `@尾巴` value although no tail is rendered.
+纯文字 = text directly over the image, with no fill, outline, or tail
+For `旁白框` and `纯文字`, still supply any legal `@尾巴` value although no tail is rendered. For `纯文字`, the rectangle is a text-layout area, not a visible box. Font, size, color, and line spacing still apply. `@描边` means bubble-outline width, not text stroke; keep it and `@白底透明度` without forcing zero, but both are ignored while rendering plain text.
 
 [TEXT COLORS]
-Keep one fixed six-digit HEX text color for each character in the same identity/state. Use the supplied narration color or `#141518`. Change colors only when the supplied state table says so. Color changes text only; fill stays white/light gray and outline stays black. Never invent colors.
+Keep one fixed six-digit HEX text color for each character in the same identity/state. Use the supplied narration color or `#141518`. Change colors only when the supplied state table says so. Color changes text only; framed bubbles keep white/light-gray fill and black outline, while plain text has neither. Never invent colors.
 
 [PLACEMENT]
 Read each image’s true pixel dimensions. The top-left is `(0,0)`. Every rectangle must satisfy `x>=0`, `y>=0`, `width>0`, `height>0`, `x+width<=image width`, and `y+height<=image height`.
@@ -120,6 +121,7 @@ Complete plot: {{paste the complete plot or this section}}
 Final images: I uploaded {{count}} final full-resolution images in the correct reading order. Follow upload order; never sort by file name. Expected size: {{example 832x1216; actual dimensions still take priority}}.
 Reading order: left-to-right, top-to-bottom.
 Caption density: {{low / medium / high}}. Narration may explain time, causality, resources, and situation, but may not restate the image.
+Caption presentation: {{use the appropriate bubble types by default; list images and lines that should use 纯文字 without a frame}}
 Dialogue style: {{character and tone requirements}}.
 Character voice and fixed text colors:
 {{name}}: {{voice}}, color {{#HEX}}
@@ -138,3 +140,33 @@ Generate the complete BCS顺序字幕脚本 v2 directly. Do not explain the proc
 - Every bubble ID is unique and every rectangle is in bounds.
 - Protocol field names and enum values remain Chinese and exact.
 - The file is UTF-8 plain text with no Markdown fence or AI explanation.
+
+## Text without a bubble frame
+
+Use **Add text** or change an existing bubble's style to plain text. You can move and resize its layout area, set font, size, color, and line spacing, save it in the project, and import/export it in BCS. The selection rectangle is an editing aid and is not included in exported images.
+
+Tell the AI which captions should use `@气泡=纯文字`. Use a safe, readable background; removing the fill does not make covering a face or key object acceptable. Keep every image section for a multi-image project. This is a complete single-image example; replace the file name and size with the actual values:
+
+```text
+@格式=BCS顺序字幕脚本
+@版本=2
+@坐标单位=px
+
+[图片 1]
+@原文件名=001.png
+@原图尺寸=1080x1920
+
+@气泡ID=p1-b1
+@矩形=70,90,500,180
+@尾巴=右下
+@气泡=纯文字
+@字体=Noto Sans SC
+@字号=34
+@颜色=#141518
+@行距=1.25
+@描边=2
+@白底透明度=100
+Dawn: a new journey begins.
+```
+
+In structured BCS blocks, a colon is part of the body text. Preserve the entire sentence before and after it; it is not removed as a speaker label. Do not add labels that are not part of the published text.

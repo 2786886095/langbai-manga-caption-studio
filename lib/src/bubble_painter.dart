@@ -261,6 +261,7 @@ Path _bubbleShapePath(Rect rect, BubbleShape shape) {
     case BubbleShape.ellipse:
       return Path()..addOval(rect);
     case BubbleShape.rounded:
+    case BubbleShape.plainText:
       return Path()..addRect(rect);
     case BubbleShape.shout:
       final path = Path();
@@ -287,6 +288,8 @@ Path _bubbleShapePath(Rect rect, BubbleShape shape) {
 }
 
 Path bubbleOutlinePath(Rect rect, BubblePlacement bubble) {
+  // Plain text keeps a rectangular editing/hit region, not a visible outline.
+  if (bubble.shape == BubbleShape.plainText) return Path();
   final body = _bubbleShapePath(rect, bubble.shape);
   if (bubble.shape != BubbleShape.ellipse &&
       bubble.shape != BubbleShape.whisper) {
@@ -303,6 +306,7 @@ bool bubbleContainsPoint(BubblePlacement bubble, Offset point) {
     bubble.width,
     bubble.height,
   );
+  if (bubble.shape == BubbleShape.plainText) return rect.contains(point);
   final shapePath = bubbleOutlinePath(rect, bubble);
   if (shapePath.contains(point)) return true;
   if (!bubbleHasPointer(bubble.shape)) return false;
@@ -346,6 +350,75 @@ int hitTestPlacedImage(List<PlacedImage> images, Offset point) {
     if (placedImageContainsPoint(images[index], point)) return index;
   }
   return -1;
+}
+
+// Lay out the complete caption in original-image pixels. Display zoom must not
+// change wrapping or apply a screen-pixel minimum that hides words on thumbnails.
+TextPainter layoutBubbleText(BubblePlacement bubble) {
+  final rect = Rect.fromLTWH(0, 0, bubble.width, bubble.height);
+  final thoughtInset = (rect.shortestSide * .18).clamp(10.0, 34.0);
+  final thoughtWidthFactor =
+      ((rect.width - thoughtInset * 2) / rect.width).clamp(.42, .78);
+  final thoughtHeightFactor =
+      ((rect.height - thoughtInset * 2) / rect.height).clamp(.42, .68);
+  final widthFactor = switch (bubble.shape) {
+    BubbleShape.ellipse || BubbleShape.whisper => .78,
+    BubbleShape.rounded => .84,
+    BubbleShape.shout => .74,
+    BubbleShape.thought => thoughtWidthFactor,
+    BubbleShape.plainText => 1.0,
+  };
+  final heightFactor = switch (bubble.shape) {
+    BubbleShape.ellipse || BubbleShape.whisper => .68,
+    BubbleShape.rounded => .72,
+    BubbleShape.shout => .62,
+    BubbleShape.thought => thoughtHeightFactor,
+    BubbleShape.plainText => 1.0,
+  };
+  final availableWidth = math.max(.0001, bubble.width * widthFactor);
+  final availableHeight = math.max(.0001, bubble.height * heightFactor);
+  final requestedSize =
+      bubble.fontSize.isFinite && bubble.fontSize > 0 ? bubble.fontSize : 34.0;
+
+  TextPainter create(double size) => TextPainter(
+        text: TextSpan(
+          text: bubble.caption.text,
+          style: TextStyle(
+            color: Color(bubble.fontColorValue),
+            fontFamily: bubble.fontFamily,
+            fontSize: size,
+            height: bubble.lineHeight,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        textAlign: TextAlign.center,
+        textDirection: ui.TextDirection.ltr,
+      )..layout(maxWidth: availableWidth);
+
+  bool fits(TextPainter painter) =>
+      painter.height <= availableHeight &&
+      painter.computeLineMetrics().every(
+            (line) => line.width <= availableWidth + .0001,
+          );
+
+  var painter = create(requestedSize);
+  if (fits(painter)) return painter;
+  painter.dispose();
+  // Search rather than silently truncating at six lines or substituting an
+  // ellipsis. Even narrow rectangles retain every character of the script.
+  var low = .0001;
+  var high = requestedSize;
+  for (var attempt = 0; attempt < 20; attempt++) {
+    final middle = (low + high) / 2;
+    painter = create(middle);
+    if (fits(painter)) {
+      low = middle;
+    } else {
+      high = middle;
+    }
+    painter.dispose();
+  }
+  return create(low);
 }
 
 class PagePainter extends CustomPainter {
@@ -602,7 +675,7 @@ class PagePainter extends CustomPainter {
       } else {
         canvas.drawPath(combined, stroke);
       }
-    } else {
+    } else if (bubble.shape != BubbleShape.plainText) {
       canvas.drawPath(shapePath, fill);
       canvas.drawPath(shapePath, stroke);
     }
@@ -616,42 +689,6 @@ class PagePainter extends CustomPainter {
       PlacedImageLayer.behindBubbles,
     );
 
-    final thoughtInset = (rect.shortestSide * .18).clamp(10.0, 34.0);
-    final thoughtWidthFactor =
-        ((rect.width - thoughtInset * 2) / rect.width).clamp(.42, .78);
-    final thoughtHeightFactor =
-        ((rect.height - thoughtInset * 2) / rect.height).clamp(.42, .68);
-    final textWidthFactor = switch (bubble.shape) {
-      BubbleShape.ellipse => .78,
-      BubbleShape.rounded => .84,
-      BubbleShape.shout => .74,
-      BubbleShape.thought => thoughtWidthFactor,
-      BubbleShape.whisper => .78,
-    };
-    final textHeightFactor = switch (bubble.shape) {
-      BubbleShape.ellipse => .68,
-      BubbleShape.rounded => .72,
-      BubbleShape.shout => .62,
-      BubbleShape.thought => thoughtHeightFactor,
-      BubbleShape.whisper => .68,
-    };
-    TextPainter createTextPainter(double size) => TextPainter(
-          text: TextSpan(
-            text: bubble.caption.text,
-            style: TextStyle(
-              color: Color(bubble.fontColorValue),
-              fontFamily: bubble.fontFamily,
-              fontSize: size,
-              height: bubble.lineHeight,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          textAlign: TextAlign.center,
-          textDirection: ui.TextDirection.ltr,
-          maxLines: 6,
-          ellipsis: '…',
-        )..layout(maxWidth: rect.width * textWidthFactor);
-
     final textSignature = Object.hash(
       bubble.caption.text,
       bubble.fontSize,
@@ -659,35 +696,31 @@ class PagePainter extends CustomPainter {
       bubble.fontColorValue,
       bubble.lineHeight,
       bubble.shape,
-      rect.width,
-      rect.height,
-      sy,
+      bubble.width,
+      bubble.height,
     );
     final cached = _textCache[bubbleIndex];
     late final TextPainter painter;
     if (cached != null && cached.signature == textSignature) {
       painter = cached.painter;
     } else {
-      var fittedSize = (bubble.fontSize * sy).clamp(12.0, 64.0);
-      var fittedPainter = createTextPainter(fittedSize);
-      final availableHeight = rect.height * textHeightFactor;
-      while (fittedPainter.height > availableHeight && fittedSize > 12) {
-        fittedSize -= 1;
-        fittedPainter = createTextPainter(fittedSize);
-      }
-      painter = fittedPainter;
+      cached?.painter.dispose();
+      painter = layoutBubbleText(bubble);
       _textCache[bubbleIndex] = (
         signature: textSignature,
         painter: painter,
       );
     }
+    canvas.save();
+    canvas.scale(sx, sy);
     painter.paint(
       canvas,
       Offset(
-        rect.center.dx - painter.width / 2,
-        rect.center.dy - painter.height / 2,
+        bubble.x + bubble.width / 2 - painter.width / 2,
+        bubble.y + bubble.height / 2 - painter.height / 2,
       ),
     );
+    canvas.restore();
     _drawBoundImages(
       canvas,
       bubble,

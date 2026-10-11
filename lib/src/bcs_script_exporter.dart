@@ -66,4 +66,5 @@ String bcsShapeName(BubbleShape value) => switch (value) {
       BubbleShape.shout => '惊喊气泡',
       BubbleShape.thought => '心理气泡',
       BubbleShape.whisper => '耳语气泡',
+      BubbleShape.plainText => '纯文字',
     };

@@ -1117,6 +1117,38 @@ const _translations = <String, Map<String, String>>{
 };
 
 const _workspaceTranslations = <String, Map<String, String>>{
+  '添加文字': {'en': 'Add text', 'ja': '文字を追加', 'ko': '텍스트 추가', 'zh_TW': '新增文字'},
+  '添加气泡或文字': {
+    'en': 'Add bubble or text',
+    'ja': '吹き出し・文字を追加',
+    'ko': '말풍선 또는 텍스트 추가',
+    'zh_TW': '新增氣泡或文字'
+  },
+  '纯文字': {'en': 'Plain text', 'ja': '文字のみ', 'ko': '일반 텍스트', 'zh_TW': '純文字'},
+  '文字属性': {
+    'en': 'Text properties',
+    'ja': '文字のプロパティ',
+    'ko': '텍스트 속성',
+    'zh_TW': '文字屬性'
+  },
+  '纯文字 · 无底色、无边框、无尾巴': {
+    'en': 'Plain text · no background, border or tail',
+    'ja': '文字のみ · 背景・枠・しっぽなし',
+    'ko': '일반 텍스트 · 배경, 테두리, 꼬리 없음',
+    'zh_TW': '純文字 · 無底色、無邊框、無尾巴'
+  },
+  '已添加纯文字，可输入文字并拖动调整位置': {
+    'en': 'Text added. Type and drag to reposition.',
+    'ja': '文字を追加しました。入力してドラッグで移動できます。',
+    'ko': '텍스트를 추가했습니다. 입력하고 드래그하여 위치를 조정하세요.',
+    'zh_TW': '已新增純文字，可輸入文字並拖曳調整位置'
+  },
+  '删除此文字': {
+    'en': 'Delete text',
+    'ja': 'この文字を削除',
+    'ko': '이 텍스트 삭제',
+    'zh_TW': '刪除此文字'
+  },
   '更多操作': {
     'en': 'More actions',
     'ja': 'その他の操作',
