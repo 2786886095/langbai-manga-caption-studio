@@ -38,10 +38,23 @@ List<BubblePlacement> preserveEditedPlacements(
             layout.widthPercent != null ||
             layout.heightPercent != null ||
             layout.positionPreset != null);
-    if (previous != null && !hasExplicitGeometry) {
-      result[i] = previous.copyWith(caption: captions[i]);
-    } else if (id.isEmpty && i < existing.length && !hasExplicitGeometry) {
-      result[i] = existing[i].copyWith(caption: captions[i]);
+    final retained =
+        previous ?? (id.isEmpty && i < existing.length ? existing[i] : null);
+    if (retained != null && !hasExplicitGeometry) {
+      // Keep manual placement, but explicit style directives are authoritative.
+      result[i] = retained.copyWith(
+        caption: captions[i],
+        shape: layout?.shape,
+        tailDirection: layout?.tailDirection,
+        fontFamily: layout?.fontFamily == null
+            ? null
+            : normalizeBubbleFontFamily(layout!.fontFamily),
+        fontColorValue: layout?.fontColorValue,
+        fontSize: layout?.fontSize,
+        lineHeight: layout?.lineHeight,
+        strokeWidth: layout?.strokeWidth,
+        fillOpacity: layout?.fillOpacity,
+      );
     }
   }
   return result;

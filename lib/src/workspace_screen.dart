@@ -1310,7 +1310,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     );
   }
 
-  void _addBubble() {
+  void _addPlainText() => _addBubble(shape: BubbleShape.plainText);
+
+  void _addBubble({BubbleShape shape = BubbleShape.ellipse}) {
     final page = _page;
     if (page == null) return;
     _remember(currentPageOnly: true);
@@ -1325,6 +1327,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     final offset = (index % 5) * page.originalWidth * .035;
     final bubble = BubblePlacement(
       caption: caption,
+      shape: shape,
       x: (page.originalWidth * .08 + offset).clamp(
         0,
         page.originalWidth - width,
@@ -1342,12 +1345,16 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
       _selectedBubble = page.placements.length - 1;
       _canvasSelection = _CanvasSelection.bubble;
       _selectionVisible = true;
+      _showRendered = true;
+      _inspectorVisible = true;
       page.approved = false;
       _markDirty();
     });
     _canvasRevision.value++;
     ScaffoldMessenger.of(context).showSnackBar(
-      _quickFeedback('已添加气泡，直接在右侧输入文字或拖动调整位置'),
+      _quickFeedback(shape == BubbleShape.plainText
+          ? '已添加纯文字，可输入文字并拖动调整位置'
+          : '已添加气泡，直接在右侧输入文字或拖动调整位置'),
     );
   }
 
@@ -3829,14 +3836,16 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
               tooltip: tr('重做'),
               icon: const Icon(Icons.redo, size: 19),
             ),
-            IconButton.filled(
-              onPressed: _addBubble,
-              tooltip: tr('新建气泡'),
+            PopupMenuButton<String>(
+              onSelected: (value) =>
+                  value == 'text' ? _addPlainText() : _addBubble(),
+              tooltip: tr('添加气泡或文字'),
               icon: const Icon(Icons.add_comment_outlined, size: 19),
-              style: IconButton.styleFrom(
-                backgroundColor: AppColors.pink,
-                foregroundColor: Colors.white,
-              ),
+              iconColor: AppColors.pink,
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'bubble', child: LText('添加气泡')),
+                PopupMenuItem(value: 'text', child: LText('添加文字')),
+              ],
             ),
             PopupMenuButton<String>(
               tooltip: tr('添加图片元素'),
@@ -3891,218 +3900,255 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
       child: Column(
         children: [
           if (!compact)
-            Container(
-              height: 48,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              color: AppColors.panel,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: LText(
-                      '当前：第01话 · ${page.name}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  LText(
-                    '对比：',
-                    style: TextStyle(fontSize: 11, color: AppColors.muted),
-                  ),
-                  TextButton(
-                    onPressed: () => setState(() => _showRendered = false),
-                    style: TextButton.styleFrom(
-                      foregroundColor:
-                          !_showRendered ? AppColors.pink : AppColors.muted,
-                      minimumSize: const Size(42, 32),
-                      padding: const EdgeInsets.symmetric(horizontal: 7),
-                    ),
-                    child: LText('原图'),
-                  ),
-                  Switch(
-                    value: _showRendered,
-                    onChanged: (value) => setState(() => _showRendered = value),
-                  ),
-                  TextButton(
-                    onPressed: () => setState(() => _showRendered = true),
-                    style: TextButton.styleFrom(
-                      foregroundColor:
-                          _showRendered ? AppColors.pink : AppColors.muted,
-                      minimumSize: const Size(42, 32),
-                      padding: const EdgeInsets.symmetric(horizontal: 7),
-                    ),
-                    child: LText('渲染'),
-                  ),
-                  const VerticalDivider(indent: 11, endIndent: 11),
-                  IconButton(
-                    onPressed: _undoStack.isEmpty ? null : _undo,
-                    tooltip: tr('撤销'),
-                    icon: const Icon(Icons.undo, size: 20),
-                  ),
-                  IconButton(
-                    onPressed: _redoStack.isEmpty ? null : _redo,
-                    tooltip: tr('重做'),
-                    icon: const Icon(Icons.redo, size: 20),
-                  ),
-                  IconButton(
-                    onPressed:
-                        _canRollbackToLastSave ? _rollbackToLastSave : null,
-                    tooltip: tr('回退到最近保存'),
-                    icon: const Icon(Icons.restore, size: 20),
-                  ),
-                  const SizedBox(width: 4),
-                  FilledButton.icon(
-                    onPressed: _addBubble,
-                    icon: const Icon(Icons.add_comment_outlined, size: 18),
-                    label: LText('添加气泡'),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 34),
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  PopupMenuButton<String>(
-                    tooltip: tr('添加图片元素'),
-                    icon: const Icon(Icons.add_photo_alternate_outlined,
-                        size: 21),
-                    onSelected: (value) {
-                      switch (value) {
-                        case 'free':
-                          _addImageElement();
-                        case 'bubble':
-                          _addImageElement(insideBubble: true);
-                        case 'library':
-                          _showStickerLibrary();
-                      }
-                    },
-                    itemBuilder: (_) => [
-                      PopupMenuItem(
-                        value: 'free',
-                        child: ListTile(
-                          leading: const Icon(Icons.image_outlined),
-                          title: LText('添加独立图片'),
-                          dense: true,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'bubble',
-                        enabled: _bubble != null,
-                        child: ListTile(
-                          leading: const Icon(Icons.bubble_chart_outlined),
-                          title: LText('图片放进当前气泡'),
-                          dense: true,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'library',
-                        child: ListTile(
-                          leading: const Icon(Icons.emoji_emotions_outlined),
-                          title: LText('全局表情包库'),
-                          dense: true,
-                        ),
-                      ),
-                    ],
-                  ),
-                  PopupMenuButton<String>(
-                    tooltip: tr('气泡编辑命令'),
-                    icon: const Icon(Icons.edit_note, size: 21),
-                    onSelected: (value) {
-                      switch (value) {
-                        case 'new':
-                          _addBubble();
-                        case 'rollback':
-                          _rollbackToLastSave();
-                        case 'duplicate':
-                          _duplicateBubble();
-                        case 'back':
-                          _moveLayer(-1);
-                        case 'front':
-                          _moveLayer(1);
-                        case 'delete':
-                          _deleteBubble();
-                        case 'inspector':
-                          setState(() => _inspectorVisible = true);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'rollback',
-                        enabled: _canRollbackToLastSave,
-                        child: ListTile(
-                          leading: const Icon(Icons.restore),
-                          title: LText('回退到最近保存'),
-                          dense: true,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'new',
-                        child: ListTile(
-                          leading: const Icon(Icons.add_comment_outlined),
-                          title: LText('新建气泡'),
-                          dense: true,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'duplicate',
-                        enabled: _bubble != null,
-                        child: ListTile(
-                          leading: const Icon(Icons.content_copy_outlined),
-                          title: LText('复制气泡'),
-                          dense: true,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'back',
-                        enabled: _bubble != null,
-                        child: ListTile(
-                          leading: const Icon(Icons.flip_to_back_outlined),
-                          title: LText('下移一层'),
-                          dense: true,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'front',
-                        enabled: _bubble != null,
-                        child: ListTile(
-                          leading: const Icon(Icons.flip_to_front_outlined),
-                          title: LText('上移一层'),
-                          dense: true,
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        enabled: _bubble != null,
-                        child: ListTile(
-                          leading: const Icon(Icons.delete_outline),
-                          title: LText('删除气泡'),
-                          dense: true,
-                        ),
-                      ),
-                      if (!_inspectorVisible)
-                        PopupMenuItem(
-                          value: 'inspector',
-                          enabled: _bubble != null,
-                          child: ListTile(
-                            leading: const Icon(Icons.tune),
-                            title: LText('打开属性面板'),
-                            dense: true,
+            LayoutBuilder(
+              builder: (_, toolbarBox) => toolbarBox.maxWidth < 800
+                  ? _compactCanvasToolbar(page)
+                  : Container(
+                      height: 48,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      color: AppColors.panel,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: LText(
+                              '当前：第01话 · ${page.name}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(width: 8),
-                  LText(
-                    '${page.originalWidth} × ${page.originalHeight}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.muted,
+                          LText(
+                            '对比：',
+                            style:
+                                TextStyle(fontSize: 11, color: AppColors.muted),
+                          ),
+                          TextButton(
+                            onPressed: () =>
+                                setState(() => _showRendered = false),
+                            style: TextButton.styleFrom(
+                              foregroundColor: !_showRendered
+                                  ? AppColors.pink
+                                  : AppColors.muted,
+                              minimumSize: const Size(42, 32),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 7),
+                            ),
+                            child: LText('原图'),
+                          ),
+                          Switch(
+                            value: _showRendered,
+                            onChanged: (value) =>
+                                setState(() => _showRendered = value),
+                          ),
+                          TextButton(
+                            onPressed: () =>
+                                setState(() => _showRendered = true),
+                            style: TextButton.styleFrom(
+                              foregroundColor: _showRendered
+                                  ? AppColors.pink
+                                  : AppColors.muted,
+                              minimumSize: const Size(42, 32),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 7),
+                            ),
+                            child: LText('渲染'),
+                          ),
+                          const VerticalDivider(indent: 11, endIndent: 11),
+                          IconButton(
+                            onPressed: _undoStack.isEmpty ? null : _undo,
+                            tooltip: tr('撤销'),
+                            icon: const Icon(Icons.undo, size: 20),
+                          ),
+                          IconButton(
+                            onPressed: _redoStack.isEmpty ? null : _redo,
+                            tooltip: tr('重做'),
+                            icon: const Icon(Icons.redo, size: 20),
+                          ),
+                          IconButton(
+                            onPressed: _canRollbackToLastSave
+                                ? _rollbackToLastSave
+                                : null,
+                            tooltip: tr('回退到最近保存'),
+                            icon: const Icon(Icons.restore, size: 20),
+                          ),
+                          const SizedBox(width: 4),
+                          FilledButton.icon(
+                            onPressed: _addBubble,
+                            icon: const Icon(Icons.add_comment_outlined,
+                                size: 18),
+                            label: LText('添加气泡'),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(0, 34),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 10),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          IconButton.outlined(
+                            onPressed: _addPlainText,
+                            tooltip: tr('添加文字'),
+                            icon: const Icon(Icons.text_fields, size: 20),
+                          ),
+                          const SizedBox(width: 4),
+                          PopupMenuButton<String>(
+                            tooltip: tr('添加图片元素'),
+                            icon: const Icon(Icons.add_photo_alternate_outlined,
+                                size: 21),
+                            onSelected: (value) {
+                              switch (value) {
+                                case 'free':
+                                  _addImageElement();
+                                case 'bubble':
+                                  _addImageElement(insideBubble: true);
+                                case 'library':
+                                  _showStickerLibrary();
+                              }
+                            },
+                            itemBuilder: (_) => [
+                              PopupMenuItem(
+                                value: 'free',
+                                child: ListTile(
+                                  leading: const Icon(Icons.image_outlined),
+                                  title: LText('添加独立图片'),
+                                  dense: true,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'bubble',
+                                enabled: _bubble != null,
+                                child: ListTile(
+                                  leading:
+                                      const Icon(Icons.bubble_chart_outlined),
+                                  title: LText('图片放进当前气泡'),
+                                  dense: true,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'library',
+                                child: ListTile(
+                                  leading:
+                                      const Icon(Icons.emoji_emotions_outlined),
+                                  title: LText('全局表情包库'),
+                                  dense: true,
+                                ),
+                              ),
+                            ],
+                          ),
+                          PopupMenuButton<String>(
+                            tooltip: tr('气泡编辑命令'),
+                            icon: const Icon(Icons.edit_note, size: 21),
+                            onSelected: (value) {
+                              switch (value) {
+                                case 'new':
+                                  _addBubble();
+                                case 'text':
+                                  _addPlainText();
+                                case 'rollback':
+                                  _rollbackToLastSave();
+                                case 'duplicate':
+                                  _duplicateBubble();
+                                case 'back':
+                                  _moveLayer(-1);
+                                case 'front':
+                                  _moveLayer(1);
+                                case 'delete':
+                                  _deleteBubble();
+                                case 'inspector':
+                                  setState(() => _inspectorVisible = true);
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              PopupMenuItem(
+                                value: 'rollback',
+                                enabled: _canRollbackToLastSave,
+                                child: ListTile(
+                                  leading: const Icon(Icons.restore),
+                                  title: LText('回退到最近保存'),
+                                  dense: true,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'new',
+                                child: ListTile(
+                                  leading:
+                                      const Icon(Icons.add_comment_outlined),
+                                  title: LText('新建气泡'),
+                                  dense: true,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'text',
+                                child: ListTile(
+                                  leading: const Icon(Icons.text_fields),
+                                  title: LText('添加文字'),
+                                  dense: true,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'duplicate',
+                                enabled: _bubble != null,
+                                child: ListTile(
+                                  leading:
+                                      const Icon(Icons.content_copy_outlined),
+                                  title: LText('复制气泡'),
+                                  dense: true,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'back',
+                                enabled: _bubble != null,
+                                child: ListTile(
+                                  leading:
+                                      const Icon(Icons.flip_to_back_outlined),
+                                  title: LText('下移一层'),
+                                  dense: true,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'front',
+                                enabled: _bubble != null,
+                                child: ListTile(
+                                  leading:
+                                      const Icon(Icons.flip_to_front_outlined),
+                                  title: LText('上移一层'),
+                                  dense: true,
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'delete',
+                                enabled: _bubble != null,
+                                child: ListTile(
+                                  leading: const Icon(Icons.delete_outline),
+                                  title: LText('删除气泡'),
+                                  dense: true,
+                                ),
+                              ),
+                              if (!_inspectorVisible)
+                                PopupMenuItem(
+                                  value: 'inspector',
+                                  enabled: _bubble != null,
+                                  child: ListTile(
+                                    leading: const Icon(Icons.tune),
+                                    title: LText('打开属性面板'),
+                                    dense: true,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(width: 8),
+                          LText(
+                            '${page.originalWidth} × ${page.originalHeight}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.muted,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
             )
           else
             _compactCanvasToolbar(page),
@@ -4739,6 +4785,15 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                       label: LText('添加空白气泡'),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _page == null ? null : _addPlainText,
+                      icon: const Icon(Icons.text_fields),
+                      label: LText('添加文字'),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -4759,7 +4814,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
               children: [
                 Expanded(
                   child: LText(
-                    '气泡属性',
+                    bubble.shape == BubbleShape.plainText ? '文字属性' : '气泡属性',
                     style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w800,
@@ -4788,6 +4843,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                   BubbleShape.shout => '惊喊气泡 · 尖锐轮廓，适合强烈情绪',
                   BubbleShape.thought => '心理气泡 · 云朵主体，圆点指向角色',
                   BubbleShape.whisper => '耳语气泡 · 虚线轮廓，四向指向尾巴',
+                  BubbleShape.plainText => '纯文字 · 无底色、无边框、无尾巴',
                 },
                 style: const TextStyle(color: AppColors.muted, fontSize: 11)),
             if (!compact) ...[
@@ -4826,6 +4882,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                   BubbleShape.thought,
                   BubbleShape.whisper,
                   BubbleShape.shout,
+                  BubbleShape.plainText,
                 ])
                   SizedBox(
                     width: compact ? 48 : 58,
@@ -4977,23 +5034,25 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
               1.8,
               (value) => _replaceBubble(bubble.copyWith(lineHeight: value)),
             ),
-            _sliderRow(
-              '描边粗细',
-              bubble.strokeWidth,
-              1,
-              8,
-              (value) => _replaceBubble(bubble.copyWith(strokeWidth: value)),
-            ),
-            _sliderRow(
-              '白底透明度',
-              bubble.fillOpacity * 100,
-              0,
-              100,
-              (value) => _replaceBubble(
-                bubble.copyWith(fillOpacity: value / 100),
+            if (bubble.shape != BubbleShape.plainText) ...[
+              _sliderRow(
+                '描边粗细',
+                bubble.strokeWidth,
+                1,
+                8,
+                (value) => _replaceBubble(bubble.copyWith(strokeWidth: value)),
               ),
-              percent: true,
-            ),
+              _sliderRow(
+                '白底透明度',
+                bubble.fillOpacity * 100,
+                0,
+                100,
+                (value) => _replaceBubble(
+                  bubble.copyWith(fillOpacity: value / 100),
+                ),
+                percent: true,
+              ),
+            ],
             if (bubbleHasPointer(bubble.shape)) ...[
               const SizedBox(height: 8),
               LText(
@@ -5058,7 +5117,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                     _deleteBubble();
                   },
                   icon: const Icon(Icons.delete_outline),
-                  label: LText('删除此气泡'),
+                  label: LText(bubble.shape == BubbleShape.plainText
+                      ? '删除此文字'
+                      : '删除此气泡'),
                 ),
               ),
             ],
@@ -5311,6 +5372,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
       BubbleShape.shout => Icons.brightness_7_outlined,
       BubbleShape.thought => Icons.cloud_outlined,
       BubbleShape.whisper => Icons.blur_on_outlined,
+      BubbleShape.plainText => Icons.text_fields,
     };
     final label = switch (shape) {
       BubbleShape.ellipse => '对话气泡',
@@ -5318,6 +5380,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
       BubbleShape.shout => '惊喊气泡',
       BubbleShape.thought => '心理气泡',
       BubbleShape.whisper => '耳语气泡',
+      BubbleShape.plainText => '纯文字',
     };
     return Tooltip(
       message: tr(label),

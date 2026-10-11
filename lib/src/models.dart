@@ -3,7 +3,8 @@ import 'dart:ui' as ui;
 
 import 'app_localization.dart';
 
-enum BubbleShape { ellipse, rounded, shout, thought, whisper }
+// Append new shapes so persisted or external references to old indices stay valid.
+enum BubbleShape { ellipse, rounded, shout, thought, whisper, plainText }
 
 enum TailDirection { upLeft, upRight, downLeft, downRight }
 

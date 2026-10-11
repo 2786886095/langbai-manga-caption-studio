@@ -41,6 +41,7 @@ ScriptParseResult parseCaptionScript(String source) {
   final textBuffer = <String>[];
   String? currentFile;
   ScriptImageSection? currentSection;
+  var usesBcsFormat = false;
   var blockLine = 1;
 
   void addCaption(CaptionLine caption) {
@@ -59,15 +60,10 @@ ScriptParseResult parseCaptionScript(String source) {
       textBuffer.clear();
       return;
     }
-    var speaker = directives['角色']?.trim() ?? '';
-    var text = rawText;
-    if (speaker.isEmpty) {
-      final separator = rawText.indexOf(RegExp(r'[:：]'));
-      if (separator > 0 && !rawText.substring(0, separator).contains('\n')) {
-        speaker = rawText.substring(0, separator).trim();
-        text = rawText.substring(separator + 1).trim();
-      }
-    }
+    // Directive blocks contain literal caption text. A colon may be narration,
+    // a time, or a URL; only legacy line input infers a speaker from it.
+    final speaker = directives['角色']?.trim() ?? '';
+    final text = rawText;
     if (text.isEmpty) {
       warnings.add('第 $blockLine 行：字幕正文为空，已忽略。');
     } else {
@@ -129,6 +125,9 @@ ScriptParseResult parseCaptionScript(String source) {
       final key = match.group(1)!.trim();
       final value = match.group(2)!.trim();
       if (currentSection == null && const {'格式', '版本', '坐标单位'}.contains(key)) {
+        if (key == '格式' && value == 'BCS顺序字幕脚本') {
+          usesBcsFormat = true;
+        }
         continue;
       }
       if (currentSection != null && key == '原文件名') {
@@ -172,7 +171,10 @@ ScriptParseResult parseCaptionScript(String source) {
       blockLine = lineNumber;
       continue;
     }
-    if (directives.isEmpty) {
+    final legacyLine = directives.isEmpty &&
+        !usesBcsFormat &&
+        (currentSection == null || currentSection.legacyHeader);
+    if (legacyLine) {
       final separator = line.indexOf(RegExp(r'[:：]'));
       final caption = separator > 0
           ? CaptionLine(
@@ -274,12 +276,14 @@ CaptionLayoutSpec _buildLayoutSpec(
   if (preset != null && !validPresets.contains(preset)) {
     warnings.add('第 $line 行：位置“$preset”无效，请使用左上、中上、右上、左中、居中、右中、左下、中下或右下。');
   }
-  final shape = switch (values['气泡']?.trim()) {
-    '椭圆' || '对话' || '对话气泡' || null => BubbleShape.ellipse,
+  final BubbleShape? shape = switch (values['气泡']?.trim()) {
+    null => null,
+    '椭圆' || '对话' || '对话气泡' => BubbleShape.ellipse,
     '圆角' || '旁白' || '旁白框' => BubbleShape.rounded,
     '思考' || '心理' || '心理气泡' => BubbleShape.thought,
     '惊喊' || '震惊' || '爆炸' || '惊喊气泡' || '震惊气泡' => BubbleShape.shout,
     '耳语' || '低语' || '耳语气泡' || '低语气泡' => BubbleShape.whisper,
+    '纯文字' || '无框文字' || 'text' || 'plainText' => BubbleShape.plainText,
     final value => _warnValue<BubbleShape>(
         warnings,
         line,
@@ -288,11 +292,12 @@ CaptionLayoutSpec _buildLayoutSpec(
         BubbleShape.ellipse,
       ),
   };
-  final tail = switch (values['尾巴']?.trim()) {
+  final TailDirection? tail = switch (values['尾巴']?.trim()) {
+    null => null,
     '左上' => TailDirection.upLeft,
     '右上' => TailDirection.upRight,
     '左下' => TailDirection.downLeft,
-    '右下' || null => TailDirection.downRight,
+    '右下' => TailDirection.downRight,
     '上' => TailDirection.upRight,
     '下' => TailDirection.downRight,
     '左' => TailDirection.downLeft,
