@@ -1,0 +1,3 @@
+# Bundled font resources, manifests and licenses are checked by byte hashes.
+# Preserve the exact upstream bytes on Windows as well as macOS/Linux.
+assets/fonts/** -text
