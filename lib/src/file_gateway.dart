@@ -34,6 +34,26 @@ Future<String?> chooseImageExportDirectory({String? initialDirectory}) =>
       initialDirectory: initialDirectory,
     );
 
+/// Browser fallback acknowledges starting individual downloads, not disk writes.
+bool isBrowserDownloadExport(String target) =>
+    target.startsWith('browser-download:');
+
+String exportTargetLabel(String target) {
+  if (isBrowserDownloadExport(target)) {
+    return '浏览器逐图下载（请允许多文件下载）';
+  }
+  if (target.startsWith('browser-directory:')) {
+    final separator = target.indexOf(':', 'browser-directory:'.length);
+    return separator < 0
+        ? '浏览器授权文件夹'
+        : Uri.decodeComponent(target.substring(separator + 1));
+  }
+  return target;
+}
+
+Future<List<String>> listBrowserExportFiles(String target) =>
+    implementation.listBrowserExportFiles(target);
+
 Future<bool> exportImageExists(String directory, String fileName) =>
     implementation.exportImageExists(directory, fileName);
 
@@ -49,3 +69,7 @@ Future<void> writeExportImage(
       bytes,
       overwrite: overwrite,
     );
+
+/// Explicit download route exists only in an ordinary browser, not the desktop bridge.
+bool get supportsIndividualBrowserDownloads =>
+    implementation.supportsIndividualBrowserDownloads;

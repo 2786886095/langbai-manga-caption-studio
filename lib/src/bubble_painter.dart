@@ -1,7 +1,9 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'models.dart';
+import 'text_layout_service.dart';
 
 class BubbleTailGeometry {
   const BubbleTailGeometry({
@@ -352,73 +354,65 @@ int hitTestPlacedImage(List<PlacedImage> images, Offset point) {
   return -1;
 }
 
-// Lay out the complete caption in original-image pixels. Display zoom must not
-// change wrapping or apply a screen-pixel minimum that hides words on thumbnails.
-TextPainter layoutBubbleText(BubblePlacement bubble) {
-  final rect = Rect.fromLTWH(0, 0, bubble.width, bubble.height);
-  final thoughtInset = (rect.shortestSide * .18).clamp(10.0, 34.0);
-  final thoughtWidthFactor =
-      ((rect.width - thoughtInset * 2) / rect.width).clamp(.42, .78);
-  final thoughtHeightFactor =
-      ((rect.height - thoughtInset * 2) / rect.height).clamp(.42, .68);
-  final widthFactor = switch (bubble.shape) {
-    BubbleShape.ellipse || BubbleShape.whisper => .78,
-    BubbleShape.rounded => .84,
-    BubbleShape.shout => .74,
-    BubbleShape.thought => thoughtWidthFactor,
-    BubbleShape.plainText => 1.0,
-  };
-  final heightFactor = switch (bubble.shape) {
-    BubbleShape.ellipse || BubbleShape.whisper => .68,
-    BubbleShape.rounded => .72,
-    BubbleShape.shout => .62,
-    BubbleShape.thought => thoughtHeightFactor,
-    BubbleShape.plainText => 1.0,
-  };
-  final availableWidth = math.max(.0001, bubble.width * widthFactor);
-  final availableHeight = math.max(.0001, bubble.height * heightFactor);
-  final requestedSize =
-      bubble.fontSize.isFinite && bubble.fontSize > 0 ? bubble.fontSize : 34.0;
+// Compatibility API; preview and export both use TextLayoutService.
+TextPainter layoutBubbleText(BubblePlacement bubble) =>
+    const TextLayoutService().layout(bubble, includeStroke: false).painter;
 
-  TextPainter create(double size) => TextPainter(
-        text: TextSpan(
-          text: bubble.caption.text,
-          style: TextStyle(
-            color: Color(bubble.fontColorValue),
-            fontFamily: bubble.fontFamily,
-            fontSize: size,
-            height: bubble.lineHeight,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        textAlign: TextAlign.center,
-        textDirection: ui.TextDirection.ltr,
-      )..layout(maxWidth: availableWidth);
+/// Owns a preview painter's native paragraph cache across delegate replacement
+/// and widget disposal. FontLoader changes invalidate metrics as well as pixels.
+/// Exporters that paint without a widget must call PagePainter.releaseLayouts.
+class ManagedPagePaint extends StatefulWidget {
+  const ManagedPagePaint({
+    super.key,
+    required this.painter,
+    this.size = Size.zero,
+    this.isComplex = false,
+    this.willChange = false,
+    this.child,
+  });
 
-  bool fits(TextPainter painter) =>
-      painter.height <= availableHeight &&
-      painter.computeLineMetrics().every(
-            (line) => line.width <= availableWidth + .0001,
-          );
+  final PagePainter painter;
+  final Size size;
+  final bool isComplex;
+  final bool willChange;
+  final Widget? child;
 
-  var painter = create(requestedSize);
-  if (fits(painter)) return painter;
-  painter.dispose();
-  // Search rather than silently truncating at six lines or substituting an
-  // ellipsis. Even narrow rectangles retain every character of the script.
-  var low = .0001;
-  var high = requestedSize;
-  for (var attempt = 0; attempt < 20; attempt++) {
-    final middle = (low + high) / 2;
-    painter = create(middle);
-    if (fits(painter)) {
-      low = middle;
-    } else {
-      high = middle;
-    }
-    painter.dispose();
+  @override
+  State<ManagedPagePaint> createState() => _ManagedPagePaintState();
+}
+
+class _ManagedPagePaintState extends State<ManagedPagePaint> {
+  @override
+  void initState() {
+    super.initState();
+    PaintingBinding.instance.systemFonts.addListener(_fontsChanged);
   }
-  return create(low);
+
+  void _fontsChanged() => widget.painter.invalidateLayouts();
+
+  @override
+  void didUpdateWidget(covariant ManagedPagePaint oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.painter, widget.painter)) {
+      oldWidget.painter.releaseLayouts();
+    }
+  }
+
+  @override
+  void dispose() {
+    PaintingBinding.instance.systemFonts.removeListener(_fontsChanged);
+    widget.painter.releaseLayouts();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+        painter: widget.painter,
+        size: widget.size,
+        isComplex: widget.isComplex,
+        willChange: widget.willChange,
+        child: widget.child,
+      );
 }
 
 class PagePainter extends CustomPainter {
@@ -444,6 +438,12 @@ class PagePainter extends CustomPainter {
             bubble.shape,
             bubble.tailDirection,
             bubble.fontSize,
+            bubble.textSizeMode,
+            bubble.textStrokeWidth,
+            bubble.textStrokeColorValue,
+            bubble.letterSpacing,
+            bubble.textAlign,
+            bubble.fontAssetId,
             bubble.lineHeight,
             bubble.strokeWidth,
             bubble.fillOpacity,
@@ -471,7 +471,39 @@ class PagePainter extends CustomPainter {
   final bool showBubbles;
   final ui.Image? sourceImage;
   final int _paintSignature;
-  final Map<int, ({int signature, TextPainter painter})> _textCache = {};
+  final Map<int, ({int signature, TextLayoutResult layout})> _textCache = {};
+  final ValueNotifier<int> _layoutInvalidation = ValueNotifier(0);
+
+  /// Reusable and idempotent: a subsequent paint reconstructs its paragraphs.
+  /// Call in a finally block after offscreen painting, or use ManagedPagePaint.
+  void releaseLayouts() {
+    for (final cached in _textCache.values) {
+      cached.layout.dispose();
+    }
+    _textCache.clear();
+  }
+
+  /// A registered font can change glyph metrics without changing fontFamily.
+  /// Clearing the cache is therefore necessary even with the same signature.
+  void invalidateLayouts() {
+    releaseLayouts();
+    _layoutInvalidation.value++;
+  }
+
+  @visibleForTesting
+  int get debugCachedLayoutCount => _textCache.length;
+
+  @override
+  void addListener(VoidCallback listener) {
+    super.addListener(listener);
+    _layoutInvalidation.addListener(listener);
+  }
+
+  @override
+  void removeListener(VoidCallback listener) {
+    super.removeListener(listener);
+    _layoutInvalidation.removeListener(listener);
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -492,6 +524,9 @@ class PagePainter extends CustomPainter {
     if (!showBubbles) return;
     final sx = size.width / page.originalWidth;
     final sy = size.height / page.originalHeight;
+    canvas.save();
+    // Fixed-size text may cross its own editing rectangle, never the page.
+    canvas.clipRect(destination);
     _drawPlacedImages(
       canvas,
       sx,
@@ -514,6 +549,7 @@ class PagePainter extends CustomPainter {
       sy,
       PlacedImageLayer.aboveBubbles,
     );
+    canvas.restore();
   }
 
   void _drawPlacedImages(
@@ -587,7 +623,27 @@ class PagePainter extends CustomPainter {
     double sy,
     PlacedImageLayer layer,
   ) {
-    final clip = _bubbleShapePath(bubbleRect, bubble.shape);
+    final clip = _bubbleShapePath(
+      Rect.fromLTWH(bubble.x, bubble.y, bubble.width, bubble.height),
+      bubble.shape,
+    ).transform(Float64List.fromList([
+      sx,
+      0,
+      0,
+      0,
+      0,
+      sy,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+    ]));
     for (var index = 0; index < page.placedImages.length; index++) {
       final image = page.placedImages[index];
       if (image.bubbleId != bubble.caption.bubbleId || image.layer != layer) {
@@ -648,6 +704,10 @@ class PagePainter extends CustomPainter {
     bool selected,
     int bubbleIndex,
   ) {
+    final sourceRect =
+        Rect.fromLTWH(bubble.x, bubble.y, bubble.width, bubble.height);
+    canvas.save();
+    canvas.scale(sx, sy);
     const fillColor = Colors.white;
     final fill = Paint()
       ..color = fillColor.withOpacity(bubble.fillOpacity.clamp(0, 1));
@@ -656,29 +716,31 @@ class PagePainter extends CustomPainter {
           ? Colors.black
           : const Color(0xff17181b)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = (bubble.strokeWidth * sx).clamp(1.5, 7);
-    final shapePath = _bubbleShapePath(rect, bubble.shape);
-    final tail = bubbleTailGeometry(rect, bubble);
+      ..strokeWidth = math.max(0.0, bubble.strokeWidth);
+    final hasStroke = bubble.strokeWidth > 0;
+    final shapePath = _bubbleShapePath(sourceRect, bubble.shape);
+    final tail = bubbleTailGeometry(sourceRect, bubble);
     if (bubble.shape == BubbleShape.thought) {
       canvas.drawPath(shapePath, fill);
-      canvas.drawPath(shapePath, stroke);
-      for (final circle in _thoughtTailCircles(rect, tail)) {
+      if (hasStroke) canvas.drawPath(shapePath, stroke);
+      for (final circle in _thoughtTailCircles(sourceRect, tail)) {
         canvas.drawCircle(circle.center, circle.radius, fill);
-        canvas.drawCircle(circle.center, circle.radius, stroke);
+        if (hasStroke) canvas.drawCircle(circle.center, circle.radius, stroke);
       }
     } else if (bubble.shape == BubbleShape.ellipse ||
         bubble.shape == BubbleShape.whisper) {
-      final combined = bubbleOutlinePath(rect, bubble);
+      final combined = bubbleOutlinePath(sourceRect, bubble);
       canvas.drawPath(combined, fill);
-      if (bubble.shape == BubbleShape.whisper) {
-        _drawDashedPath(canvas, combined, stroke, dash: 8 * sx, gap: 6 * sx);
-      } else {
+      if (hasStroke && bubble.shape == BubbleShape.whisper) {
+        _drawDashedPath(canvas, combined, stroke, dash: 8, gap: 6);
+      } else if (hasStroke) {
         canvas.drawPath(combined, stroke);
       }
     } else if (bubble.shape != BubbleShape.plainText) {
       canvas.drawPath(shapePath, fill);
-      canvas.drawPath(shapePath, stroke);
+      if (hasStroke) canvas.drawPath(shapePath, stroke);
     }
+    canvas.restore();
 
     _drawBoundImages(
       canvas,
@@ -698,28 +760,28 @@ class PagePainter extends CustomPainter {
       bubble.shape,
       bubble.width,
       bubble.height,
+      bubble.textSizeMode,
+      bubble.textStrokeWidth,
+      bubble.textStrokeColorValue,
+      bubble.letterSpacing,
+      bubble.textAlign,
+      bubble.fontAssetId,
     );
     final cached = _textCache[bubbleIndex];
-    late final TextPainter painter;
+    late final TextLayoutResult layout;
     if (cached != null && cached.signature == textSignature) {
-      painter = cached.painter;
+      layout = cached.layout;
     } else {
-      cached?.painter.dispose();
-      painter = layoutBubbleText(bubble);
+      cached?.layout.dispose();
+      layout = const TextLayoutService().layout(bubble);
       _textCache[bubbleIndex] = (
         signature: textSignature,
-        painter: painter,
+        layout: layout,
       );
     }
     canvas.save();
     canvas.scale(sx, sy);
-    painter.paint(
-      canvas,
-      Offset(
-        bubble.x + bubble.width / 2 - painter.width / 2,
-        bubble.y + bubble.height / 2 - painter.height / 2,
-      ),
-    );
+    layout.paint(canvas, Offset(bubble.x, bubble.y));
     canvas.restore();
     _drawBoundImages(
       canvas,

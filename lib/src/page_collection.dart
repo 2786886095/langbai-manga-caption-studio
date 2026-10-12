@@ -49,6 +49,18 @@ List<BubblePlacement> preserveEditedPlacements(
         fontFamily: layout?.fontFamily == null
             ? null
             : normalizeBubbleFontFamily(layout!.fontFamily),
+        fontAssetId: layout?.fontFamily != null
+            ? layout?.fontAssetId
+            : retained.fontAssetId,
+        fontDisplayName: layout?.fontFamily != null
+            ? layout?.fontDisplayName
+            : retained.fontDisplayName,
+        textSizeMode: layout?.textSizeMode,
+        textStrokeWidth: layout?.textStrokeWidth,
+        textStrokeColorValue: layout?.textStrokeColorValue,
+        letterSpacing: layout?.letterSpacing,
+        textAlign: layout?.textAlign,
+        styleId: layout?.styleId ?? retained.styleId,
         fontColorValue: layout?.fontColorValue,
         fontSize: layout?.fontSize,
         lineHeight: layout?.lineHeight,

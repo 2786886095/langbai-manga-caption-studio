@@ -15,6 +15,9 @@ class BubbleTextEditor extends StatefulWidget {
     required this.compact,
     required this.onChanged,
     this.onTap,
+    this.onUndo,
+    this.onRedo,
+    this.onCommit,
   });
 
   final String editorId;
@@ -22,6 +25,9 @@ class BubbleTextEditor extends StatefulWidget {
   final bool compact;
   final ValueChanged<String> onChanged;
   final VoidCallback? onTap;
+  final VoidCallback? onUndo;
+  final VoidCallback? onRedo;
+  final VoidCallback? onCommit;
 
   @override
   State<BubbleTextEditor> createState() => _BubbleTextEditorState();
@@ -29,11 +35,15 @@ class BubbleTextEditor extends StatefulWidget {
 
 class _BubbleTextEditorState extends State<BubbleTextEditor> {
   late final TextEditingController _controller;
+  final _focus = FocusNode();
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.text);
+    _focus.addListener(() {
+      if (!_focus.hasFocus) widget.onCommit?.call();
+    });
   }
 
   @override
@@ -54,17 +64,31 @@ class _BubbleTextEditorState extends State<BubbleTextEditor> {
   @override
   void dispose() {
     _controller.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => TextFormField(
-        controller: _controller,
-        minLines: widget.compact ? 1 : 3,
-        maxLines: widget.compact ? 2 : 5,
-        maxLength: 200,
-        contextMenuBuilder: buildAppTextContextMenu,
-        onTap: widget.onTap,
-        onChanged: widget.onChanged,
-      );
+  Widget build(BuildContext context) => Actions(
+          actions: {
+            if (widget.onUndo != null)
+              UndoTextIntent: CallbackAction<UndoTextIntent>(onInvoke: (_) {
+                widget.onUndo!();
+                return null;
+              }),
+            if (widget.onRedo != null)
+              RedoTextIntent: CallbackAction<RedoTextIntent>(onInvoke: (_) {
+                widget.onRedo!();
+                return null;
+              }),
+          },
+          child: TextFormField(
+            controller: _controller,
+            focusNode: _focus,
+            minLines: widget.compact ? 1 : 3,
+            maxLines: widget.compact ? 2 : 5,
+            contextMenuBuilder: buildAppTextContextMenu,
+            onTap: widget.onTap,
+            onChanged: widget.onChanged,
+          ));
 }

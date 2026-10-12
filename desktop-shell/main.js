@@ -96,12 +96,20 @@ async function projectDirectory() {
 async function readProjectCatalog() {
   const directory = await projectDirectory();
   const catalogPath = path.join(directory, 'catalog.json');
+  let failed = null;
   for (const candidate of [catalogPath, `${catalogPath}.bak`]) {
     try {
-      return JSON.parse(await fs.readFile(candidate, 'utf8'));
-    } catch {
-      // Try the previous complete generation before returning an empty hub.
+      const parsed = JSON.parse(await fs.readFile(candidate, 'utf8'));
+      if (!Array.isArray(parsed)) throw new Error('项目目录不是有效列表');
+      return parsed;
+    } catch (error) {
+      if (error.code !== 'ENOENT') failed = error;
+      // A genuinely absent catalog is empty; damaged/unreadable generations are
+      // not. Try the complete backup before surfacing the original failure.
     }
+  }
+  if (failed) {
+    throw new Error(`项目目录及备份均不可读取，原数据未覆盖：${failed.message}`);
   }
   return [];
 }
@@ -218,14 +226,20 @@ async function atomicWriteWithBackup(filePath, bytes) {
 }
 
 async function readJsonArtifact(filePath, expectedFormat) {
+  let failed = null;
   for (const candidate of [filePath, `${filePath}.bak`]) {
     try {
       const bytes = await fs.readFile(candidate);
       const parsed = JSON.parse(bytes.toString('utf8'));
       if (parsed && parsed.format === expectedFormat) return bytes;
-    } catch {
+      throw new Error(`项目数据格式无效：${expectedFormat}`);
+    } catch (error) {
+      if (error.code !== 'ENOENT') failed = error;
       // Fall through to the previous complete generation.
     }
+  }
+  if (failed) {
+    throw new Error(`项目主数据及备份均不可读取，原数据未覆盖：${filePath} · ${failed.message}`);
   }
   return null;
 }
@@ -445,8 +459,8 @@ ipcMain.handle('desktop:save-project-manifest', async (_event, request) => {
     path.join(projectPath, 'manifest.json'),
     requestBuffer(request),
   );
-  // A successful manifest write completes legacy migration; remove the huge packed copy.
-  await fs.rm(path.join(directory, `${request.id}.bcs.json`), { force: true });
+  // Preserve legacy packed bytes as a recovery source. Rolling manifest backups
+  // and the independent migration history must never erase this original.
   const catalog = await readProjectCatalog();
   const previous = catalog.find((project) => project.id === request.id);
   const updated = {
