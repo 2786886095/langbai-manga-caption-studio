@@ -121,7 +121,9 @@ jobs:
           flutter build ios --release --no-codesign
           mkdir -p Payload
           cp -R build/ios/iphoneos/Runner.app Payload/
-          ditto -c -k --sequesterRsrc Payload "Langbai-Manga-Caption-Studio-iOS-unsigned-${{ needs.validate.outputs.app_version }}.ipa"
+          IPA_PATH="Langbai-Manga-Caption-Studio-iOS-unsigned-${{ needs.validate.outputs.app_version }}.ipa"
+          ditto -c -k --sequesterRsrc --keepParent Payload "$IPA_PATH"
+          unzip -Z1 "$IPA_PATH" | grep -Fx 'Payload/Runner.app/Info.plist'
       - uses: actions/upload-artifact@v4
         with:
           name: apple-release
