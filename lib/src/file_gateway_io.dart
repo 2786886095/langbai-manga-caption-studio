@@ -49,6 +49,8 @@ Future<String?> chooseImageExportDirectory({String? initialDirectory}) =>
       initialDirectory: initialDirectory,
     );
 
+Future<List<String>> listBrowserExportFiles(String target) async => const [];
+
 String _safeExportPath(String directory, String fileName) =>
     '${Directory(directory).absolute.path}${Platform.pathSeparator}${fileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')}';
 
@@ -68,3 +70,5 @@ Future<void> writeExportImage(
   await target.parent.create(recursive: true);
   await target.writeAsBytes(bytes, flush: true);
 }
+
+bool get supportsIndividualBrowserDownloads => false;

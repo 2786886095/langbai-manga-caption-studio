@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.2.8+38
+version: 1.3.0+39
 
 environment:
   sdk: '>=3.5.0 <4.0.0'
@@ -42,6 +42,7 @@ dependencies:
   http: ^1.5.0
   package_info_plus: ^8.3.1
   url_launcher: ^6.3.1
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:
@@ -69,6 +70,14 @@ flutter:
     - assets/fonts/OFL-NotoSansSC.txt
     - assets/fonts/OFL-ZCOOLXiaoWei.txt
     - assets/fonts/OFL-MaShanZheng.txt
+    - assets/fonts/fonts_manifest.json
+    - assets/fonts/OFL-NotoSerifSC.txt
+    - assets/fonts/OFL-LXGWWenKai.txt
+    - assets/fonts/OFL-ZCOOLKuaiLe.txt
+    - assets/fonts/OFL-ZCOOLQingKeHuangYou.txt
+    - assets/fonts/OFL-LiuJianMaoCao.txt
+    - assets/fonts/OFL-LongCang.txt
+    - assets/fonts/OFL-ZhiMangXing.txt
     - AI字幕脚本生成指南.md
     - guides/ai_guide_zh_TW.md
     - guides/ai_guide_en.md
@@ -85,6 +94,27 @@ flutter:
     - family: Ma Shan Zheng
       fonts:
         - asset: assets/fonts/MaShanZheng-Regular.ttf
+    - family: Noto Serif SC
+      fonts:
+        - asset: assets/fonts/NotoSerifSC-Variable.ttf
+    - family: LXGW WenKai
+      fonts:
+        - asset: assets/fonts/LXGWWenKai-Regular.ttf
+    - family: ZCOOL KuaiLe
+      fonts:
+        - asset: assets/fonts/ZCOOLKuaiLe-Regular.ttf
+    - family: ZCOOL QingKe HuangYou
+      fonts:
+        - asset: assets/fonts/ZCOOLQingKeHuangYou-Regular.ttf
+    - family: Liu Jian Mao Cao
+      fonts:
+        - asset: assets/fonts/LiuJianMaoCao-Regular.ttf
+    - family: Long Cang
+      fonts:
+        - asset: assets/fonts/LongCang-Regular.ttf
+    - family: Zhi Mang Xing
+      fonts:
+        - asset: assets/fonts/ZhiMangXing-Regular.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

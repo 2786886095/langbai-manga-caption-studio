@@ -8,6 +8,20 @@ enum BubbleShape { ellipse, rounded, shout, thought, whisper, plainText }
 
 enum TailDirection { upLeft, upRight, downLeft, downRight }
 
+enum TextSizeMode { fixed, fit }
+
+// Shared by the inspector, BCS parser and layout engine (original-image pixels).
+abstract final class TextStyleLimits {
+  static const minFontSize = 8.0;
+  static const maxFontSize = 200.0;
+  static const minLineHeight = .8;
+  static const maxLineHeight = 3.0;
+  static const minStrokeWidth = 0.0;
+  static const maxStrokeWidth = 20.0;
+  static const minLetterSpacing = -10.0;
+  static const maxLetterSpacing = 50.0;
+}
+
 enum PlacedImageFit { contain, cover }
 
 enum PlacedImageLayer { behindBubbles, aboveBubbles }
@@ -125,6 +139,14 @@ class CaptionLayoutSpec {
     this.fontFamily,
     this.fontColorValue,
     this.fontSize,
+    this.textSizeMode,
+    this.textStrokeWidth,
+    this.textStrokeColorValue,
+    this.letterSpacing,
+    this.textAlign,
+    this.fontAssetId,
+    this.fontDisplayName,
+    this.styleId,
     this.lineHeight,
     this.strokeWidth,
     this.fillOpacity,
@@ -145,6 +167,14 @@ class CaptionLayoutSpec {
   final String? fontFamily;
   final int? fontColorValue;
   final double? fontSize;
+  final TextSizeMode? textSizeMode;
+  final double? textStrokeWidth;
+  final int? textStrokeColorValue;
+  final double? letterSpacing;
+  final ui.TextAlign? textAlign;
+  final String? fontAssetId;
+  final String? fontDisplayName;
+  final String? styleId;
   final double? lineHeight;
   final double? strokeWidth;
   final double? fillOpacity;
@@ -192,6 +222,15 @@ class BubblePlacement {
     this.tailX = .5,
     this.tailY = 1.15,
     this.fontSize = 34,
+    // Missing mode in old projects must keep their original auto-fit behavior.
+    this.textSizeMode = TextSizeMode.fit,
+    this.textStrokeWidth = 0,
+    this.textStrokeColorValue = 0xff000000,
+    this.letterSpacing = 0,
+    this.textAlign = ui.TextAlign.center,
+    this.fontAssetId,
+    this.fontDisplayName,
+    this.styleId,
     this.lineHeight = 1.25,
     this.strokeWidth = 3,
     this.fillOpacity = 1,
@@ -208,6 +247,14 @@ class BubblePlacement {
   final double tailX;
   final double tailY;
   final double fontSize;
+  final TextSizeMode textSizeMode;
+  final double textStrokeWidth;
+  final int textStrokeColorValue;
+  final double letterSpacing;
+  final ui.TextAlign textAlign;
+  final String? fontAssetId;
+  final String? fontDisplayName;
+  final String? styleId;
   final double lineHeight;
   final double strokeWidth;
   final double fillOpacity;
@@ -225,6 +272,14 @@ class BubblePlacement {
     double? tailX,
     double? tailY,
     double? fontSize,
+    TextSizeMode? textSizeMode,
+    double? textStrokeWidth,
+    int? textStrokeColorValue,
+    double? letterSpacing,
+    ui.TextAlign? textAlign,
+    Object? fontAssetId = _keepBubbleBinding,
+    Object? fontDisplayName = _keepBubbleBinding,
+    Object? styleId = _keepBubbleBinding,
     double? lineHeight,
     double? strokeWidth,
     double? fillOpacity,
@@ -242,6 +297,20 @@ class BubblePlacement {
         tailX: tailX ?? this.tailX,
         tailY: tailY ?? this.tailY,
         fontSize: fontSize ?? this.fontSize,
+        textSizeMode: textSizeMode ?? this.textSizeMode,
+        textStrokeWidth: textStrokeWidth ?? this.textStrokeWidth,
+        textStrokeColorValue: textStrokeColorValue ?? this.textStrokeColorValue,
+        letterSpacing: letterSpacing ?? this.letterSpacing,
+        textAlign: textAlign ?? this.textAlign,
+        fontAssetId: identical(fontAssetId, _keepBubbleBinding)
+            ? this.fontAssetId
+            : fontAssetId as String?,
+        fontDisplayName: identical(fontDisplayName, _keepBubbleBinding)
+            ? this.fontDisplayName
+            : fontDisplayName as String?,
+        styleId: identical(styleId, _keepBubbleBinding)
+            ? this.styleId
+            : styleId as String?,
         lineHeight: lineHeight ?? this.lineHeight,
         strokeWidth: strokeWidth ?? this.strokeWidth,
         fillOpacity: fillOpacity ?? this.fillOpacity,

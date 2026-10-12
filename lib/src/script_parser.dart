@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'models.dart';
 import 'app_localization.dart';
 
@@ -22,11 +24,15 @@ class ScriptParseResult {
     this.unassigned, [
     this.warnings = const [],
     this.sections = const [],
+    this.version = 2,
+    this.errors = const [],
   ]);
   final Map<String, List<CaptionLine>> byFile;
   final List<CaptionLine> unassigned;
   final List<String> warnings;
   final List<ScriptImageSection> sections;
+  final int version;
+  final List<String> errors;
 
   bool get usesSequentialFormat =>
       sections.any((section) => !section.legacyHeader);
@@ -36,13 +42,17 @@ ScriptParseResult parseCaptionScript(String source) {
   final byFile = <String, List<CaptionLine>>{};
   final unassigned = <CaptionLine>[];
   final warnings = <String>[];
+  final errors = <String>[];
   final sections = <ScriptImageSection>[];
   final directives = <String, String>{};
   final textBuffer = <String>[];
   String? currentFile;
   ScriptImageSection? currentSection;
   var usesBcsFormat = false;
+  var scriptVersion = 2;
   var blockLine = 1;
+  var literalBody = false;
+  var literalLinesRemaining = 0;
 
   void addCaption(CaptionLine caption) {
     currentSection?.captions.add(caption);
@@ -54,8 +64,9 @@ ScriptParseResult parseCaptionScript(String source) {
   }
 
   void flushBlock() {
-    final rawText = textBuffer.join('\n').trim();
-    if (rawText.isEmpty) {
+    final rawText =
+        literalBody ? textBuffer.join('\n') : textBuffer.join('\n').trim();
+    if (rawText.isEmpty && !literalBody) {
       directives.clear();
       textBuffer.clear();
       return;
@@ -64,7 +75,7 @@ ScriptParseResult parseCaptionScript(String source) {
     // a time, or a URL; only legacy line input infers a speaker from it.
     final speaker = directives['角色']?.trim() ?? '';
     final text = rawText;
-    if (text.isEmpty) {
+    if (text.isEmpty && !literalBody) {
       warnings.add('第 $blockLine 行：字幕正文为空，已忽略。');
     } else {
       addCaption(
@@ -73,17 +84,28 @@ ScriptParseResult parseCaptionScript(String source) {
           text: text,
           layout: directives.isEmpty
               ? null
-              : _buildLayoutSpec(directives, blockLine, warnings),
+              : _buildLayoutSpec(directives, blockLine, warnings,
+                  version: scriptVersion),
           bubbleId: directives['气泡ID']?.trim() ?? '',
         ),
       );
     }
     directives.clear();
     textBuffer.clear();
+    literalBody = false;
+    literalLinesRemaining = 0;
   }
 
   final lines = source.split(RegExp(r'\r?\n'));
   for (var index = 0; index < lines.length; index++) {
+    if (literalLinesRemaining > 0) {
+      // BCS 3 counted bodies are literal, including blank lines, whitespace,
+      // comments and strings that look like image headers or directives.
+      textBuffer.add(lines[index]);
+      literalLinesRemaining--;
+      if (literalLinesRemaining == 0) flushBlock();
+      continue;
+    }
     final lineNumber = index + 1;
     final line = lines[index].trim();
     if (line.startsWith('#')) continue;
@@ -124,9 +146,31 @@ ScriptParseResult parseCaptionScript(String source) {
       }
       final key = match.group(1)!.trim();
       final value = match.group(2)!.trim();
+      if (key == '正文行数') {
+        final count = int.tryParse(value);
+        if (scriptVersion < 3 ||
+            currentSection == null ||
+            count == null ||
+            count < 0 ||
+            count > 100000) {
+          errors.add('第 $lineNumber 行：@正文行数 仅适用于 BCS v3 图片段，必须是 0–100000 的整数。');
+          continue;
+        }
+        blockLine = lineNumber;
+        literalBody = true;
+        literalLinesRemaining = count;
+        if (count == 0) flushBlock();
+        continue;
+      }
       if (currentSection == null && const {'格式', '版本', '坐标单位'}.contains(key)) {
         if (key == '格式' && value == 'BCS顺序字幕脚本') {
           usesBcsFormat = true;
+        }
+        if (key == '版本') {
+          scriptVersion = int.tryParse(value) ?? 0;
+          if (!const {1, 2, 3}.contains(scriptVersion)) {
+            warnings.add('第 $lineNumber 行：仅支持 BCS 版本 1、2、3。');
+          }
         }
         continue;
       }
@@ -161,6 +205,13 @@ ScriptParseResult parseCaptionScript(String source) {
         '行距',
         '描边',
         '白底透明度',
+        '字号模式',
+        '文字描边',
+        '文字描边颜色',
+        '字距',
+        '对齐',
+        '字体素材ID',
+        '样式ID',
       };
       if (!bubbleDirectiveKeys.contains(key)) {
         warnings.add('第 $lineNumber 行：未知指令 @$key，请检查拼写。');
@@ -187,6 +238,9 @@ ScriptParseResult parseCaptionScript(String source) {
       textBuffer.add(line);
     }
   }
+  if (literalLinesRemaining > 0) {
+    errors.add('第 $blockLine 行：正文行数不足，还缺 $literalLinesRemaining 行；脚本不能应用。');
+  }
   flushBlock();
   for (var i = 0; i < sections.length; i++) {
     final section = sections[i];
@@ -203,6 +257,8 @@ ScriptParseResult parseCaptionScript(String source) {
     unassigned,
     warnings.map(tr).toList(growable: false),
     sections,
+    scriptVersion,
+    errors.map(tr).toList(growable: false),
   );
 }
 
@@ -210,7 +266,10 @@ List<String> validateScriptForPages(
   ScriptParseResult parsed,
   List<ImagePage> pages,
 ) {
-  final errors = <String>[];
+  final errors = <String>[...parsed.errors];
+  if (!const {1, 2, 3}.contains(parsed.version)) {
+    errors.add('仅支持 BCS 版本 1、2、3，不能应用未知版本的脚本。');
+  }
   if (parsed.sections.length != pages.length) {
     errors.add(
       '图片共 ${pages.length} 张，但脚本有 ${parsed.sections.length} 个图片段。两者必须完全一致。',
@@ -258,10 +317,8 @@ List<String> validateScriptForPages(
 }
 
 CaptionLayoutSpec _buildLayoutSpec(
-  Map<String, String> values,
-  int line,
-  List<String> warnings,
-) {
+    Map<String, String> values, int line, List<String> warnings,
+    {int version = 2}) {
   final rect = _parsePixelRect(values['矩形'], line, warnings);
   final coordinate = _parsePercentPair(values['坐标'], '坐标', line, warnings);
   final size = _parsePercentPair(
@@ -314,6 +371,21 @@ CaptionLayoutSpec _buildLayoutSpec(
     null || '' => null,
     final value => normalizeBubbleFontFamily(value),
   };
+  final sizeMode = switch (values['字号模式']?.trim()) {
+    null || '' => version >= 3 ? TextSizeMode.fixed : null,
+    '固定' || 'fixed' => TextSizeMode.fixed,
+    '自动适配' || '适配' || 'fit' => TextSizeMode.fit,
+    final value => _warnValue<TextSizeMode>(warnings, line, '字号模式', value,
+        version >= 3 ? TextSizeMode.fixed : TextSizeMode.fit),
+  };
+  final textAlign = switch (values['对齐']?.trim()) {
+    null || '' => null,
+    '居中' || 'center' => ui.TextAlign.center,
+    '左对齐' || '左' || 'left' => ui.TextAlign.left,
+    '右对齐' || '右' || 'right' => ui.TextAlign.right,
+    final value => _warnValue<ui.TextAlign>(
+        warnings, line, '对齐', value, ui.TextAlign.center),
+  };
   if (values.containsKey('尾巴位置')) {
     warnings.add('第 $line 行：@尾巴位置 已停用；尾部固定在气泡边缘，只需设置四向 @尾巴。');
   }
@@ -339,10 +411,24 @@ CaptionLayoutSpec _buildLayoutSpec(
     tailDirection: tail,
     tailPosition: null,
     fontFamily: font,
+    fontDisplayName: values['字体']?.trim(),
+    fontAssetId: values['字体素材ID']?.trim(),
+    styleId: values['样式ID']?.trim(),
     fontColorValue: _parseColor(values['颜色'], line, warnings),
-    fontSize: _parseNumber(values['字号'], '字号', line, warnings, 8, 200),
-    lineHeight: _parseNumber(values['行距'], '行距', line, warnings, .8, 3),
-    strokeWidth: _parseNumber(values['描边'], '描边', line, warnings, 0, 20),
+    fontSize: _parseNumber(values['字号'], '字号', line, warnings,
+        TextStyleLimits.minFontSize, TextStyleLimits.maxFontSize),
+    textSizeMode: sizeMode,
+    textStrokeWidth: _parseNumber(values['文字描边'], '文字描边', line, warnings,
+        TextStyleLimits.minStrokeWidth, TextStyleLimits.maxStrokeWidth),
+    textStrokeColorValue:
+        _parseColor(values['文字描边颜色'], line, warnings, '文字描边颜色'),
+    letterSpacing: _parseNumber(values['字距'], '字距', line, warnings,
+        TextStyleLimits.minLetterSpacing, TextStyleLimits.maxLetterSpacing),
+    textAlign: textAlign,
+    lineHeight: _parseNumber(values['行距'], '行距', line, warnings,
+        TextStyleLimits.minLineHeight, TextStyleLimits.maxLineHeight),
+    strokeWidth: _parseNumber(values['描边'], '描边', line, warnings,
+        TextStyleLimits.minStrokeWidth, TextStyleLimits.maxStrokeWidth),
     fillOpacity: fillOpacityPercent == null ? null : fillOpacityPercent / 100,
   );
 }
@@ -417,18 +503,19 @@ double? _parseNumber(
 ) {
   if (raw == null || raw.trim().isEmpty) return null;
   final value = double.tryParse(raw.replaceAll(RegExp(r'[^0-9.\-]'), ''));
-  if (value == null || value < min || value > max) {
+  if (value == null || !value.isFinite || value < min || value > max) {
     warnings.add('第 $line 行：@$name 必须在 $min 到 $max 之间。');
     return null;
   }
   return value;
 }
 
-int? _parseColor(String? raw, int line, List<String> warnings) {
+int? _parseColor(String? raw, int line, List<String> warnings,
+    [String name = '颜色']) {
   if (raw == null || raw.trim().isEmpty) return null;
   final hex = raw.trim().replaceFirst('#', '');
   if (!RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(hex)) {
-    warnings.add('第 $line 行：@颜色 必须是六位十六进制颜色，例如 #141518。');
+    warnings.add('第 $line 行：@$name 必须是六位十六进制颜色，例如 #141518。');
     return null;
   }
   return int.parse('ff$hex', radix: 16);

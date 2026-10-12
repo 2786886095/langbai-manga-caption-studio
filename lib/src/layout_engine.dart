@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'models.dart';
 
 class LayoutEngine {
@@ -74,8 +75,16 @@ class LayoutEngine {
           tailDirection: spec?.tailDirection ??
               (column == 0 ? TailDirection.downRight : TailDirection.downLeft),
           fontFamily: normalizeBubbleFontFamily(spec?.fontFamily),
+          fontDisplayName: spec?.fontDisplayName,
+          fontAssetId: spec?.fontAssetId,
+          styleId: spec?.styleId,
           fontColorValue: spec?.fontColorValue ?? 0xff141518,
           fontSize: spec?.fontSize ?? 34,
+          textSizeMode: spec?.textSizeMode ?? TextSizeMode.fit,
+          textStrokeWidth: spec?.textStrokeWidth ?? 0,
+          textStrokeColorValue: spec?.textStrokeColorValue ?? 0xff000000,
+          letterSpacing: spec?.letterSpacing ?? 0,
+          textAlign: spec?.textAlign ?? ui.TextAlign.center,
           lineHeight: spec?.lineHeight ?? 1.25,
           strokeWidth: spec?.strokeWidth ?? 3,
           fillOpacity: spec?.fillOpacity ?? 1,

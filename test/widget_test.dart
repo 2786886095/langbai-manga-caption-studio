@@ -112,7 +112,7 @@ void main() {
 
     final script = buildBcsScript([first, second]);
 
-    expect(script, startsWith('@格式=BCS顺序字幕脚本\n@版本=2\n'));
+    expect(script, startsWith('@格式=BCS顺序字幕脚本\n@版本=3\n'));
     expect(script, contains('[图片 1]\n@原文件名=001.png'));
     expect(script, contains('@原图尺寸=832x1216'));
     expect(script, contains('@矩形=45,156,250,195'));
@@ -497,7 +497,7 @@ void main() {
 
     final encoded = encodeProject([page], '[001.png]\n小雪：测试工程');
     final rawProject = jsonDecode(utf8.decode(encoded)) as Map<String, dynamic>;
-    expect(rawProject['schemaVersion'], 2);
+    expect(rawProject['schemaVersion'], 3);
     expect((rawProject['pages'] as List).single['originalWidth'], 1);
     expect((rawProject['pages'] as List).single['pageId'], page.pageId);
     final decoded = await decodeProject(encoded);

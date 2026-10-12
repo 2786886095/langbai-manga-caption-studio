@@ -164,17 +164,49 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       await tester
           .runAsync(() => Future<void>.delayed(const Duration(seconds: 2)));
-      var edits = await tester
-          .runAsync(() => loadLocalProjectEdits('plain-text-fixture'));
-      for (var i = 0; i < 40; i++) {
-        if (edits != null && utf8.decode(edits).contains(text)) break;
-        await pumpUi();
+      // Native IO completions resume in the widget test's fake-async zone. Each
+      // atomic write/history step may require another pump; a fixed 120-pump
+      // allowance is not a durable-save deadline. Drive those microtasks while
+      // polling the exact on-disk text, with a bounded real-time deadline.
+      Uint8List? edits;
+      final saveDeadline = Stopwatch()..start();
+      while (saveDeadline.elapsed < const Duration(seconds: 15)) {
+        for (var round = 0; round < 10; round++) {
+          await tester.pump(const Duration(milliseconds: 10));
+        }
+        await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 5)));
         edits = await tester.runAsync<Uint8List?>(
             () => loadLocalProjectEdits('plain-text-fixture'));
+        if (edits != null && utf8.decode(edits).contains(text)) break;
       }
       expect(edits, isNotNull);
       expect(utf8.decode(edits!), contains('plainText'));
       expect(utf8.decode(edits), contains(text));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      // Reopen through the real manifest + edits loading path rather than only
+      // proving that the serialized file contains the edited text.
+      await tester.runAsync(() => tester.pumpWidget(MaterialApp(
+          theme: buildAppTheme(),
+          home: WorkspaceScreen(
+              projectId: 'plain-text-fixture',
+              projectName: '纯文字测试',
+              onExitToProjects: () {}))));
+      final reopenDeadline = Stopwatch()..start();
+      while (canvas.evaluate().isEmpty &&
+          reopenDeadline.elapsed < const Duration(seconds: 15)) {
+        for (var round = 0; round < 10; round++) {
+          await tester.pump(const Duration(milliseconds: 10));
+        }
+        await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 5)));
+      }
+      expect(canvas, findsOneWidget);
+      expect(current().page.placements.single.caption.text, text);
+      expect(current().page.placements.single.shape, BubbleShape.plainText);
+      expect(current().page.placements.single.textSizeMode, TextSizeMode.fixed);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
       expect(tester.takeException(), isNull);

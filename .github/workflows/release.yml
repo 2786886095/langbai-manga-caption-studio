@@ -16,17 +16,29 @@ jobs:
       app_version: ${{ steps.version.outputs.app_version }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - name: Read and verify app version
         id: version
         shell: bash
         run: |
-          APP_VERSION=$(sed -n 's/^version: \([0-9][0-9.]*\)+.*/\1/p' pubspec.yaml)
-          test -n "$APP_VERSION"
-          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "v$APP_VERSION" ]]; then
-            echo "Tag $GITHUB_REF_NAME does not match pubspec version $APP_VERSION" >&2
-            exit 1
-          fi
-          echo "app_version=$APP_VERSION" >> "$GITHUB_OUTPUT"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const source = fs.readFileSync('pubspec.yaml', 'utf8');
+          const match = source.match(/^version:\s*([0-9]+\.[0-9]+\.[0-9]+)\+([0-9]+)\s*$/m);
+          if (!match) throw new Error('This workflow publishes stable versions only: expected x.y.z+build');
+          const appVersion = match[1];
+          const build = Number(match[2]);
+          if (!Number.isSafeInteger(build) || build < 1) throw new Error('Invalid app build number');
+          const shellVersion = JSON.parse(fs.readFileSync('desktop-shell/package.json', 'utf8')).version;
+          if (shellVersion !== appVersion) throw new Error(`Shell ${shellVersion} differs from pubspec ${appVersion}`);
+          if (process.env.GITHUB_REF_TYPE === 'tag' && process.env.GITHUB_REF_NAME !== `v${appVersion}`) {
+            throw new Error(`Tag ${process.env.GITHUB_REF_NAME} differs from app v${appVersion}`);
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `app_version=${appVersion}\n`);
+          console.log(`Validated stable version ${appVersion}, build ${build}, shell ${shellVersion}`);
+          NODE
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -176,7 +188,7 @@ jobs:
             }
           }
           pnpm exec electron-builder --win nsis portable --publish never
-          node verify-package.js dist\win-unpacked\resources\app.asar
+          node verify-package.js dist\win-unpacked\resources\app.asar "${{ needs.validate.outputs.app_version }}"
           New-Item -ItemType Directory -Path $env:GITHUB_WORKSPACE\release-assets -Force | Out-Null
           Copy-Item -Path dist\*.exe,dist\*.blockmap,dist\latest.yml -Destination $env:GITHUB_WORKSPACE\release-assets -Force
       - uses: actions/upload-artifact@v4
@@ -198,5 +210,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --title "浪白漫画字幕工坊 $RELEASE_TAG" --generate-notes
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft --title "浪白漫画字幕工坊 $RELEASE_TAG" --generate-notes
           find release-assets -maxdepth 1 -type f -print0 | xargs -0 gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest
