@@ -372,11 +372,13 @@ CaptionLayoutSpec _buildLayoutSpec(
     final value => normalizeBubbleFontFamily(value),
   };
   final sizeMode = switch (values['字号模式']?.trim()) {
-    null || '' => version >= 3 ? TextSizeMode.fixed : null,
-    '固定' || 'fixed' => TextSizeMode.fixed,
-    '自动适配' || '适配' || 'fit' => TextSizeMode.fit,
-    final value => _warnValue<TextSizeMode>(warnings, line, '字号模式', value,
-        version >= 3 ? TextSizeMode.fixed : TextSizeMode.fit),
+    // Absent directives stay absent for partial updates of existing objects.
+    // LayoutEngine supplies the global 200/auto defaults to genuinely new ones.
+    null || '' => null,
+    '固定' || '手动挡' || '手动' || 'fixed' => TextSizeMode.fixed,
+    '自动适配' || '自动挡' || '自动' || '适配' || 'fit' => TextSizeMode.fit,
+    final value =>
+      _warnValue<TextSizeMode>(warnings, line, '字号模式', value, TextSizeMode.fit),
   };
   final textAlign = switch (values['对齐']?.trim()) {
     null || '' => null,

@@ -393,7 +393,7 @@ BubblePlacement _decodePlacement(
     tailX: .5,
     tailY: _number(item, 'tailY', 1.15),
     tailDirection: _decodeTailDirection(item['tailDirection']),
-    fontSize: _number(item, 'fontSize', 34),
+    fontSize: _number(item, 'fontSize', TextStyleLimits.maxFontSize),
     textSizeMode:
         _enumValue(TextSizeMode.values, item['textSizeMode'], TextSizeMode.fit),
     textStrokeWidth: _number(item, 'textStrokeWidth'),

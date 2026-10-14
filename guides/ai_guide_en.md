@@ -6,13 +6,13 @@ Start from the app's current complete BCS export and final full-resolution image
 
 The header is exactly three separate lines: `@格式=BCS顺序字幕脚本`, `@版本=3`, `@坐标单位=px`. Keep every image section, including images with no captions, and preserve existing IDs. Base fields remain `@气泡ID`, `@矩形`, `@尾巴`, `@气泡`, `@字体`, `@字号`, `@颜色`, `@行距`, `@描边`, `@白底透明度`. Protocol names and values stay Chinese.
 
-- `@字号模式=固定` keeps the requested font size; `自动适配` explicitly allows shrinking. Old v1/v2 scripts retain auto-fit. Fixed text may extend outside its editing box; the app warns, and only the entire page bounds clip it. Enlarge the safe rectangle, shorten the line, reduce size manually, or choose fit.
+- Default to `@字号=200` and `@字号模式=自动适配`: auto mode selects the largest fitting size within 8–200 and can grow or shrink as the rectangle changes. If 8 still overflows, enlarge the safe box or shorten text; never discard text or shrink below 8. `固定` is manual mode and retains the explicitly chosen size.
 - `@文字描边=0–20` and `@文字描边颜色=#HEX` outline the letters. `@描边=0–20` outlines the bubble only; zero means none. Plain text (`@气泡=纯文字`) has no bubble fill, border or tail, but can have a text outline.
 - `@字距=-10–50` and `@对齐=左对齐|居中|右对齐` control letter spacing and alignment. Font size is 8–200, line height 0.8–3, fill opacity 0–100. All lengths use original-image pixels, not preview pixels; decimal geometry is supported.
 - Optional `@字体素材ID` identifies a supplied font asset; optional `@样式ID` links objects to a named style. Preserve known IDs; never fabricate them. Use a readable font display name, not just its runtime hash alias.
 - The final metadata line for each caption is `@正文行数=N`. The next **exactly N lines** are literal visible text, including blank lines, leading/trailing spaces, `@`, `#`, `[图片 …]`, and colons. Count body blanks, not separators between blocks. `N=0` retains an empty bubble. Invalid or unfinished counts prevent application.
 
-Default new text settings: `@字号模式=固定`, `@文字描边=0`, `@文字描边颜色=#000000`, `@字距=0`, `@对齐=居中`. Use only the user's actual dialogue and assigned colors. Preserve continuous story logic, speaker proximity and reading order; protect faces, hands, props, actions and existing text. Verify every image dimension, rectangle, unique ID and literal line count internally before producing the complete script.
+Default new text settings: `@字号=200`, `@字号模式=自动适配`, `@文字描边=0`, `@文字描边颜色=#000000`, `@字距=0`, `@对齐=居中`. Use only the user's actual dialogue and assigned colors. Preserve continuous story logic, speaker proximity and reading order; protect faces, hands, props, actions and existing text. Verify every image dimension, rectangle, unique ID and literal line count internally before producing the complete script.
 
 ```text
 @格式=BCS顺序字幕脚本
@@ -28,12 +28,12 @@ Default new text settings: `@字号模式=固定`, `@文字描边=0`, `@文字�
 @尾巴=右下
 @气泡=纯文字
 @字体=Noto Sans SC
-@字号=40
+@字号=200
 @颜色=#141518
 @行距=1.25
 @描边=0
 @白底透明度=100
-@字号模式=固定
+@字号模式=自动适配
 @文字描边=2
 @文字描边颜色=#FFFFFF
 @字距=0

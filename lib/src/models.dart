@@ -221,8 +221,9 @@ class BubblePlacement {
     this.shape = BubbleShape.ellipse,
     this.tailX = .5,
     this.tailY = 1.15,
-    this.fontSize = 34,
-    // Missing mode in old projects must keep their original auto-fit behavior.
+    this.fontSize = TextStyleLimits.maxFontSize,
+    // New objects use global 8–200 auto sizing. Explicit saved manual values
+    // are restored by the codec rather than replaced by these defaults.
     this.textSizeMode = TextSizeMode.fit,
     this.textStrokeWidth = 0,
     this.textStrokeColorValue = 0xff000000,
@@ -367,8 +368,11 @@ class ImagePage {
           (bubble.caption.text.runes.length / estimatedCharactersPerLine)
               .ceil()
               .clamp(1, 1000);
-      if (estimatedLines * bubble.fontSize * bubble.lineHeight >
-          bubble.height * .72) {
+      // Auto sizing ignores the stored manual size; its actual overflow is
+      // measured by TextLayoutService, not this fixed-size approximation.
+      if (bubble.textSizeMode == TextSizeMode.fixed &&
+          estimatedLines * bubble.fontSize * bubble.lineHeight >
+              bubble.height * .72) {
         issues.add('气泡 ${i + 1} 的文字可能溢出');
       }
       final rect = ui.Rect.fromLTWH(

@@ -143,7 +143,9 @@ List<BubblePlacement> mergeScriptPlacements(List<BubblePlacement> current,
 String linkedTextStyleKey(BubblePlacement b) => jsonEncode([
       b.fontAssetId ?? b.fontFamily,
       b.fontDisplayName,
-      b.fontSize,
+      b.textSizeMode == TextSizeMode.fit
+          ? TextStyleLimits.maxFontSize
+          : b.fontSize,
       b.fontColorValue,
       b.lineHeight,
       b.textSizeMode.name,

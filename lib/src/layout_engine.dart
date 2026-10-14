@@ -79,7 +79,7 @@ class LayoutEngine {
           fontAssetId: spec?.fontAssetId,
           styleId: spec?.styleId,
           fontColorValue: spec?.fontColorValue ?? 0xff141518,
-          fontSize: spec?.fontSize ?? 34,
+          fontSize: spec?.fontSize ?? TextStyleLimits.maxFontSize,
           textSizeMode: spec?.textSizeMode ?? TextSizeMode.fit,
           textStrokeWidth: spec?.textStrokeWidth ?? 0,
           textStrokeColorValue: spec?.textStrokeColorValue ?? 0xff000000,

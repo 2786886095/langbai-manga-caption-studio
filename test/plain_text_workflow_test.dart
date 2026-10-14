@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 // ignore: depend_on_referenced_packages
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:bubble_caption_studio/src/app_theme.dart';
+import 'package:bubble_caption_studio/src/app_localization.dart';
 import 'package:bubble_caption_studio/src/bubble_painter.dart';
 import 'package:bubble_caption_studio/src/bubble_text_editor.dart';
 import 'package:bubble_caption_studio/src/bcs_script_exporter.dart';
@@ -17,6 +18,7 @@ import 'package:bubble_caption_studio/src/page_collection.dart';
 import 'package:bubble_caption_studio/src/project_codec.dart';
 import 'package:bubble_caption_studio/src/project_store.dart';
 import 'package:bubble_caption_studio/src/script_parser.dart';
+import 'package:bubble_caption_studio/src/text_layout_service.dart';
 import 'package:bubble_caption_studio/src/workspace_screen.dart';
 
 class _IsolatedPaths extends PathProviderPlatform {
@@ -30,6 +32,21 @@ class _IsolatedPaths extends PathProviderPlatform {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('manual and automatic controls and feedback have localized labels', () {
+    expect(tr('手动挡', languageCode: 'en'), 'Manual');
+    expect(tr('自动挡', languageCode: 'en'), 'Auto');
+    expect(tr('自动挡', languageCode: 'ja'), '自動');
+    expect(tr('手动挡', languageCode: 'ko'), '수동');
+    expect(tr('自动挡', languageCode: 'zh_TW'), '自動檔');
+    expect(
+        trArgs('自动挡 · 上限 {limit} · 实际字号 {size}', {'limit': 200, 'size': '38.5'},
+            languageCode: 'en'),
+        'Auto · maximum 200 · actual size 38.5');
+    expect(
+        trArgs('自动挡：最小字号 {min} 仍超框，请扩大文字框或精简文字', {'min': 8},
+            languageCode: 'en'),
+        contains('minimum size 8'));
+  });
   test('explicit text-only style applies without changing manual geometry', () {
     final old = BubblePlacement(
         caption: const CaptionLine(speaker: '', text: '旧', bubbleId: 'p1-b1'),
@@ -130,6 +147,8 @@ void main() {
       PagePainter current() =>
           (tester.widget<CustomPaint>(canvas).painter! as PagePainter);
       expect(current().page.placements.single.shape, BubbleShape.plainText);
+      expect(current().page.placements.single.fontSize, 200);
+      expect(current().page.placements.single.textSizeMode, TextSizeMode.fit);
       expect(current().selectedIndex, 0);
       if (portrait) {
         await tester.tap(find.byTooltip('元素属性'));
@@ -138,6 +157,9 @@ void main() {
       expect(find.text('文字属性'), findsWidgets);
       expect(find.text('描边粗细'), findsNothing);
       expect(find.text('白底透明度'), findsNothing);
+      expect(find.text('手动挡'), findsOneWidget);
+      expect(find.text('自动挡'), findsOneWidget);
+      expect(find.text('字体大小'), findsNothing);
       final editor = find.descendant(
           of: find.byType(BubbleTextEditor), matching: find.byType(TextField));
       const text = '纯文字测试：冒号前后全部保留';
@@ -145,8 +167,85 @@ void main() {
       await tester.pump();
       expect(current().page.placements.single.caption.text, text);
       expect(buildBcsScript([current().page]), contains('@气泡=纯文字'));
+      final automaticLayout =
+          const TextLayoutService().layout(current().page.placements.single);
+      final visibleSize = automaticLayout.effectiveFontSize;
+      automaticLayout.dispose();
+      await tester.ensureVisible(find.text('手动挡'));
+      await tester.tap(find.text('手动挡'));
+      await tester.pump();
+      expect(current().page.placements.single.textSizeMode, TextSizeMode.fixed);
+      expect(current().page.placements.single.fontSize,
+          closeTo(visibleSize, .001));
+      final fontRow = find
+          .ancestor(of: find.text('字体大小'), matching: find.byType(Row))
+          .first;
+      final fontSlider = tester.widget<Slider>(
+          find.descendant(of: fontRow, matching: find.byType(Slider)));
+      fontSlider.onChangeStart?.call(42);
+      fontSlider.onChanged!(42);
+      fontSlider.onChangeEnd?.call(42);
+      await tester.pump();
+      expect(current().page.placements.single.fontSize, 42);
+      await tester.ensureVisible(fontRow);
+      await tester.tap(find.descendant(of: fontRow, matching: find.text('42')));
+      await tester.pump();
+      final numericDialog = find.byType(AlertDialog);
+      await tester.enterText(
+          find.descendant(of: numericDialog, matching: find.byType(TextField)),
+          '37');
+      await tester.tap(find.descendant(
+          of: numericDialog,
+          matching: find.widgetWithText(FilledButton, '应用')));
+      await pumpUi();
+      expect(current().page.placements.single.fontSize, 37);
+      expect(current().page.placements.single.textSizeMode, TextSizeMode.fixed);
+      // Existing Reset still rearranges geometry; it must not reset manual size.
+      await tester.ensureVisible(find.text('重置'));
+      await tester.tap(find.text('重置'));
+      await tester.pump();
+      expect(current().page.placements.single.fontSize, 37);
+      expect(current().page.placements.single.textSizeMode, TextSizeMode.fixed);
+      await tester.ensureVisible(find.text('自动挡'));
+      await tester.tap(find.text('自动挡'));
+      await tester.pump();
+      expect(current().page.placements.single.fontSize, 200);
+      expect(current().page.placements.single.textSizeMode, TextSizeMode.fit);
+      expect(find.text('字体大小'), findsNothing);
+      final unchangedScript = buildBcsScript([current().page]);
+      final modes = tester.widget<SegmentedButton<TextSizeMode>>(
+          find.byType(SegmentedButton<TextSizeMode>));
+      modes.onSelectionChanged!({TextSizeMode.fit});
+      modes.onSelectionChanged!({TextSizeMode.fit});
+      await tester.pump();
+      expect(buildBcsScript([current().page]), unchangedScript);
+      // One Undo must undo the mode change, not a repeated no-op selection.
+      final undo = tester.widget<IconButton>(find
+          .byWidgetPredicate((widget) =>
+              widget is IconButton &&
+              (widget.tooltip?.startsWith('撤销') ?? false))
+          .first);
+      undo.onPressed!();
+      await tester.pump();
+      expect(current().page.placements.single.textSizeMode, TextSizeMode.fixed);
+      expect(current().page.placements.single.fontSize, 37);
+      final redo = tester.widget<IconButton>(find
+          .byWidgetPredicate((widget) =>
+              widget is IconButton &&
+              (widget.tooltip?.startsWith('重做') ?? false))
+          .first);
+      redo.onPressed!();
+      await tester.pump();
+      expect(current().page.placements.single.textSizeMode, TextSizeMode.fit);
+      expect(current().page.placements.single.fontSize, 200);
       if (portrait) {
-        await tester.tap(find.byTooltip('关闭属性面板').last);
+        // Undo/redo clears selection, so the empty sheet has no inspector Close
+        // button. Dismiss through its normal outside barrier in that state.
+        if (find.byTooltip('关闭属性面板').evaluate().isNotEmpty) {
+          await tester.tap(find.byTooltip('关闭属性面板').last);
+        } else {
+          await tester.tapAt(Offset(size.width / 2, 8));
+        }
         await pumpUi();
       }
       final origin = tester.getTopLeft(canvas);
@@ -206,7 +305,19 @@ void main() {
       expect(canvas, findsOneWidget);
       expect(current().page.placements.single.caption.text, text);
       expect(current().page.placements.single.shape, BubbleShape.plainText);
-      expect(current().page.placements.single.textSizeMode, TextSizeMode.fixed);
+      expect(current().page.placements.single.textSizeMode, TextSizeMode.fit);
+      expect(current().page.placements.single.fontSize, 200);
+      if (find.byTooltip('添加气泡或文字').evaluate().isNotEmpty) {
+        await tester.tap(find.byTooltip('添加气泡或文字'));
+        await pumpUi();
+        await tester.tap(find.text('添加气泡').last);
+      } else {
+        await tester.tap(find.text('添加气泡').first);
+      }
+      await pumpUi();
+      expect(current().page.placements.last.shape, BubbleShape.ellipse);
+      expect(current().page.placements.last.fontSize, 200);
+      expect(current().page.placements.last.textSizeMode, TextSizeMode.fit);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
       expect(tester.takeException(), isNull);

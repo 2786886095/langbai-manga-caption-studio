@@ -1117,6 +1117,47 @@ const _translations = <String, Map<String, String>>{
 };
 
 const _workspaceTranslations = <String, Map<String, String>>{
+  '手动挡': {'en': 'Manual', 'ja': '手動', 'ko': '수동', 'zh_TW': '手動檔'},
+  '自动挡': {'en': 'Auto', 'ja': '自動', 'ko': '자동', 'zh_TW': '自動檔'},
+  '自动挡 · 上限 {limit} · 实际字号 {size}': {
+    'en': 'Auto · maximum {limit} · actual size {size}',
+    'ja': '自動 · 上限 {limit} · 実際の文字サイズ {size}',
+    'ko': '자동 · 최대 {limit} · 실제 크기 {size}',
+    'zh_TW': '自動檔 · 上限 {limit} · 實際字號 {size}'
+  },
+  '手动挡 · 字号 {size} · 拉框不会改变字号': {
+    'en': 'Manual · size {size} · resizing the box keeps this size',
+    'ja': '手動 · 文字サイズ {size} · 枠を変えても文字サイズは変わりません',
+    'ko': '수동 · 크기 {size} · 상자 크기를 바꿔도 글자 크기는 유지됩니다',
+    'zh_TW': '手動檔 · 字號 {size} · 拉框不會改變字號'
+  },
+  '自动挡：最小字号 {min} 仍超框，请扩大文字框或精简文字': {
+    'en':
+        'Auto: text still overflows at the minimum size {min}. Enlarge the text box or shorten the text.',
+    'ja': '自動：最小文字サイズ {min} でも枠を超えています。枠を広げるか文字を減らしてください。',
+    'ko': '자동: 최소 크기 {min}에서도 글자가 넘칩니다. 텍스트 상자를 키우거나 내용을 줄이세요.',
+    'zh_TW': '自動檔：最小字號 {min} 仍超框，請擴大文字框或精簡文字'
+  },
+  '手动挡：文字超框，请扩大文字框、减小字号或选择自动挡': {
+    'en':
+        'Manual: text overflows. Enlarge the text box, reduce the size, or choose Auto.',
+    'ja': '手動：文字が枠を超えています。枠を広げるか文字サイズを小さくするか自動に切り替えてください。',
+    'ko': '수동: 글자가 넘칩니다. 상자를 키우거나 글자 크기를 줄이거나 자동을 선택하세요.',
+    'zh_TW': '手動檔：文字超框，請擴大文字框、減小字號或選擇自動檔'
+  },
+  '自动挡会在 {min}–{max} 内选取不溢出的最大字号': {
+    'en': 'Auto chooses the largest fitting size within {min}–{max}.',
+    'ja': '自動は {min}–{max} の範囲で枠に収まる最大の文字サイズを選びます。',
+    'ko': '자동은 {min}–{max} 범위에서 넘치지 않는 최대 글자 크기를 선택합니다.',
+    'zh_TW': '自動檔會在 {min}–{max} 內選取不溢出的最大字號'
+  },
+  '自动挡统一上限 {limit}；手动字号仅在手动挡生效': {
+    'en':
+        'Auto always uses a maximum of {limit}; a manual font size only applies in Manual mode.',
+    'ja': '自動の上限は常に {limit} です。指定した文字サイズは手動モードでのみ有効です。',
+    'ko': '자동의 최대 크기는 항상 {limit}입니다. 지정한 글자 크기는 수동 모드에서만 적용됩니다.',
+    'zh_TW': '自動檔統一上限 {limit}；手動字號僅在手動檔生效'
+  },
   '添加文字': {'en': 'Add text', 'ja': '文字を追加', 'ko': '텍스트 추가', 'zh_TW': '新增文字'},
   '添加气泡或文字': {
     'en': 'Add bubble or text',

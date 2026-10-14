@@ -89,6 +89,7 @@ void main() {
         width: 100,
         height: 70,
         styleId: 'shared',
+        textSizeMode: TextSizeMode.fixed,
         fontSize: 34);
     final second = first.copyWith(caption: caption.copyWith(bubbleId: 'p1-b2'));
     expect(
