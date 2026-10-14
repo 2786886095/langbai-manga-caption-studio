@@ -36,6 +36,7 @@ void main() {
           y: 20.75,
           width: 220,
           height: 90,
+          fontSize: 34,
           textSizeMode: TextSizeMode.fixed,
           shape: BubbleShape.plainText)
     ];

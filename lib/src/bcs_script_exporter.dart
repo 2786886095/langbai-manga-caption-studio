@@ -37,7 +37,8 @@ String buildBcsScript(List<ImagePage> pages, {int version = 3}) {
         ..writeln('@尾巴=${bcsTailName(bubble.tailDirection)}')
         ..writeln('@气泡=${bcsShapeName(bubble.shape)}')
         ..writeln('@字体=${bcsFontName(bubble)}')
-        ..writeln('@字号=${bcsNumber(bubble.fontSize)}')
+        ..writeln(
+            '@字号=${bcsNumber(bubble.textSizeMode == TextSizeMode.fit ? TextStyleLimits.maxFontSize : bubble.fontSize)}')
         ..writeln(
           '@颜色=#${bubble.fontColorValue.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}',
         )

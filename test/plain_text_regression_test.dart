@@ -8,6 +8,7 @@ import 'package:bubble_caption_studio/src/layout_engine.dart';
 import 'package:bubble_caption_studio/src/models.dart';
 import 'package:bubble_caption_studio/src/project_codec.dart';
 import 'package:bubble_caption_studio/src/script_parser.dart';
+import 'package:bubble_caption_studio/src/text_layout_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -50,7 +51,7 @@ void main() {
       () async {
     final page = await _transparentPage();
     addTearDown(page.dispose);
-    final bubble = _plainBubble();
+    final bubble = _plainBubble().copyWith(textSizeMode: TextSizeMode.fixed);
     page
       ..captions = [bubble.caption]
       ..placements = [bubble];
@@ -58,6 +59,8 @@ void main() {
     final script = buildBcsScript([page]);
     expect(script, contains('@气泡=纯文字\n'));
     expect(script, contains('@颜色=#D12A45\n'));
+    expect(script, contains('@字号=34\n'));
+    expect(script, contains('@字号模式=固定\n'));
     expect(script, contains(_completeText));
     final parsed = parseCaptionScript(script);
     expect(parsed.warnings, isEmpty);
@@ -74,6 +77,7 @@ void main() {
     expect(restored.fontColorValue, bubble.fontColorValue);
     expect(restored.fontFamily, bubble.fontFamily);
     expect(restored.fontSize, bubble.fontSize);
+    expect(restored.textSizeMode, TextSizeMode.fixed);
     expect(restored.lineHeight, bubble.lineHeight);
     expect(restored.x, bubble.x);
     expect(restored.y, bubble.y);
@@ -161,25 +165,54 @@ void main() {
     expect(_alphaAt(selectedPixels, 24, 24), greaterThan(0));
   });
 
-  test('long captions retain all lines rather than truncating at six lines',
+  test('long captions fit sufficient height without truncating at six lines',
       () {
     final text = List.generate(12, (index) => '完整第${index + 1}行').join('\n');
     for (final shape in BubbleShape.values) {
-      final painter = layoutBubbleText(
-        _plainBubble().copyWith(
-          shape: shape,
-          width: 220,
-          height: 100,
-          caption: CaptionLine(speaker: '', text: text),
-        ),
+      final bubble = _plainBubble().copyWith(
+        shape: shape,
+        width: 220,
+        height: 300,
+        textSizeMode: TextSizeMode.fit,
+        caption: CaptionLine(speaker: '', text: text),
       );
+      final painter = layoutBubbleText(bubble);
       expect(painter.text!.toPlainText(), text);
       expect(painter.maxLines, isNull);
       expect(painter.ellipsis, isNull);
       expect(painter.didExceedMaxLines, isFalse);
       expect(painter.computeLineMetrics(), hasLength(12));
-      expect(painter.height, lessThanOrEqualTo(100));
+      expect((painter.text! as TextSpan).style!.fontSize,
+          inInclusiveRange(8.0, 200.0));
+      expect(
+          painter.height,
+          lessThanOrEqualTo(
+              const TextLayoutService().textArea(bubble).height + .0001));
       painter.dispose();
+    }
+  });
+
+  test(
+      'twelve lines in a short box retain full text at 8 px and report overflow',
+      () {
+    final text = List.generate(12, (index) => '完整第${index + 1}行').join('\n');
+    for (final shape in BubbleShape.values) {
+      final bubble = _plainBubble().copyWith(
+          shape: shape,
+          width: 220,
+          height: 100,
+          textSizeMode: TextSizeMode.fit,
+          caption: CaptionLine(speaker: '', text: text));
+      final result = const TextLayoutService().layout(bubble);
+      expect(result.effectiveFontSize, 8);
+      expect(result.overflow, isTrue);
+      expect(result.painter.height, greaterThan(result.availableRect.height));
+      expect(result.painter.text!.toPlainText(), text);
+      expect(result.painter.maxLines, isNull);
+      expect(result.painter.ellipsis, isNull);
+      expect(result.painter.didExceedMaxLines, isFalse);
+      expect(result.painter.computeLineMetrics(), hasLength(12));
+      result.dispose();
     }
   });
 

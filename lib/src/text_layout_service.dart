@@ -6,7 +6,9 @@ import 'package:flutter/painting.dart';
 import 'models.dart';
 
 /// One source-image-pixel layout for the inspector, preview and PNG exporter.
-/// Fixed mode never changes the chosen size or truncates the caption. Callers
+/// Fixed mode never changes the chosen size or truncates the caption. Auto mode
+/// independently chooses the largest fitting original-pixel size in 8–200.
+/// Callers
 /// may warn on [TextLayoutResult.overflow]; rendering is clipped only by the page.
 class TextLayoutService {
   const TextLayoutService();
@@ -17,7 +19,7 @@ class TextLayoutService {
     final availableHeight = math.max(.0001, availableRect.height);
     final requestedSize = bubble.fontSize.isFinite && bubble.fontSize > 0
         ? bubble.fontSize
-        : 34.0;
+        : TextStyleLimits.maxFontSize;
 
     TextPainter create(double size, {bool stroke = false}) {
       final outline = ui.Paint()
@@ -49,24 +51,33 @@ class TextLayoutService {
               (line) => line.width <= availableWidth + .0001,
             );
 
-    var effectiveSize = requestedSize;
+    var effectiveSize = bubble.textSizeMode == TextSizeMode.fit
+        ? TextStyleLimits.maxFontSize
+        : requestedSize;
     var painter = create(effectiveSize);
     if (bubble.textSizeMode == TextSizeMode.fit && !fits(painter)) {
       painter.dispose();
-      var low = .0001;
-      var high = requestedSize;
-      for (var attempt = 0; attempt < 20; attempt++) {
-        final middle = (low + high) / 2;
-        painter = create(middle);
-        if (fits(painter)) {
-          low = middle;
-        } else {
-          high = middle;
-        }
-        painter.dispose();
-      }
-      effectiveSize = low;
+      effectiveSize = TextStyleLimits.minFontSize;
       painter = create(effectiveSize);
+      // Keep the complete paragraph at 8 even if it still overflows. Never
+      // shrink below the readable lower bound or replace text with ellipses.
+      if (fits(painter)) {
+        painter.dispose();
+        var low = TextStyleLimits.minFontSize;
+        var high = TextStyleLimits.maxFontSize;
+        for (var attempt = 0; attempt < 20; attempt++) {
+          final middle = (low + high) / 2;
+          painter = create(middle);
+          if (fits(painter)) {
+            low = middle;
+          } else {
+            high = middle;
+          }
+          painter.dispose();
+        }
+        effectiveSize = low;
+        painter = create(effectiveSize);
+      }
     }
     final metrics = painter.computeLineMetrics();
     return TextLayoutResult(

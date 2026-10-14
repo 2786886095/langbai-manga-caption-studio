@@ -1508,6 +1508,14 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                           contentPadding: EdgeInsets.zero,
                           value: selected.contains(property),
                           title: LText(labels[property]!),
+                          subtitle: property == _BubbleStyleProperty.fontSize
+                              ? Text(
+                                  trArgs('自动挡统一上限 {limit}；手动字号仅在手动挡生效', {
+                                    'limit': TextStyleLimits.maxFontSize
+                                        .toStringAsFixed(0),
+                                  }),
+                                  style: const TextStyle(fontSize: 11))
+                              : null,
                           onChanged: (checked) => setDialogState(() {
                             if (checked == true) {
                               selected.add(property);
@@ -1666,15 +1674,41 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     final effective = result.effectiveFontSize;
     final overflow = result.overflow;
     result.dispose();
+    final automatic = bubble.textSizeMode == TextSizeMode.fit;
     return Text(
         overflow
-            ? '文字超框：固定字号未缩小，请调整框或主动选择自动适应'
-            : bubble.textSizeMode == TextSizeMode.fit
-                ? '实际字号 ${effective.toStringAsFixed(1)} / 设置 ${bubble.fontSize.toStringAsFixed(1)}'
-                : '固定字号 ${bubble.fontSize.toStringAsFixed(1)} · 拉框不会改变字号',
+            ? automatic
+                ? trArgs('自动挡：最小字号 {min} 仍超框，请扩大文字框或精简文字', {
+                    'min': TextStyleLimits.minFontSize.toStringAsFixed(0),
+                  })
+                : tr('手动挡：文字超框，请扩大文字框、减小字号或选择自动挡')
+            : automatic
+                ? trArgs('自动挡 · 上限 {limit} · 实际字号 {size}', {
+                    'limit': TextStyleLimits.maxFontSize.toStringAsFixed(0),
+                    'size': effective.toStringAsFixed(1),
+                  })
+                : trArgs('手动挡 · 字号 {size} · 拉框不会改变字号', {
+                    'size': bubble.fontSize.toStringAsFixed(1),
+                  }),
         style: TextStyle(
             fontSize: 11,
             color: overflow ? Colors.deepOrange : AppColors.muted));
+  }
+
+  void _setTextSizeMode(TextSizeMode mode) {
+    final bubble = _bubble;
+    if (bubble == null || bubble.textSizeMode == mode) return;
+    double fontSize;
+    if (mode == TextSizeMode.fit) {
+      fontSize = TextStyleLimits.maxFontSize;
+    } else {
+      // Freeze the visible automatic result, not its global 200px upper bound.
+      final layout = const TextLayoutService().layout(bubble);
+      fontSize = layout.effectiveFontSize;
+      layout.dispose();
+    }
+    _replaceBubble(bubble.copyWith(textSizeMode: mode, fontSize: fontSize),
+        remember: true);
   }
 
   Widget _linkedStyleControls(BubblePlacement bubble) {
@@ -1870,7 +1904,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     final bubble = BubblePlacement(
       caption: caption,
       shape: shape,
-      textSizeMode: TextSizeMode.fixed,
+      fontSize: TextStyleLimits.maxFontSize,
+      textSizeMode: TextSizeMode.fit,
       x: (page.originalWidth * .08 + offset).clamp(
         0,
         page.originalWidth - width,
@@ -3510,7 +3545,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   String _formatGuideText() {
     const sample = '@格式=BCS顺序字幕脚本\n@版本=3\n@坐标单位=px\n\n'
         '[图片 1]\n@原文件名=example.png\n@原图尺寸=1080x1920\n\n'
-        '@气泡ID=p1-b1\n@矩形=80,100,520,260\n@尾巴=右下\n@气泡=对话气泡\n@字体=Noto Sans SC\n@字号=34\n@颜色=#141518\n@行距=1.25\n@描边=2\n@白底透明度=100\n@字号模式=固定\n@文字描边=0\n@文字描边颜色=#000000\n@字距=0\n@对齐=居中\n@正文行数=1\nCaption text\n\n';
+        '@气泡ID=p1-b1\n@矩形=80,100,520,260\n@尾巴=右下\n@气泡=对话气泡\n@字体=Noto Sans SC\n@字号=200\n@颜色=#141518\n@行距=1.25\n@描边=2\n@白底透明度=100\n@字号模式=自动适配\n@文字描边=0\n@文字描边颜色=#000000\n@字距=0\n@对齐=居中\n@正文行数=1\nCaption text\n\n';
     return switch (AppLocaleController.instance.languageCode) {
       'en' => '$sample'
           'BCS v3: @正文行数 counts literal body lines; @字号模式=固定 does not shrink text. v1/v2 remain readable.\nNotes:\n'
@@ -5894,23 +5929,36 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                     visualDensity: VisualDensity.compact,
                     padding: WidgetStatePropertyAll(
                         EdgeInsets.symmetric(horizontal: 8))),
-                segments: const [
-                  ButtonSegment(value: TextSizeMode.fixed, label: Text('固定字号')),
-                  ButtonSegment(value: TextSizeMode.fit, label: Text('自动适应'))
+                segments: [
+                  ButtonSegment(value: TextSizeMode.fixed, label: LText('手动挡')),
+                  ButtonSegment(value: TextSizeMode.fit, label: LText('自动挡'))
                 ],
                 selected: {bubble.textSizeMode},
-                onSelectionChanged: (value) => _replaceBubble(
-                    bubble.copyWith(textSizeMode: value.single),
-                    remember: true)),
+                onSelectionChanged: (value) => _setTextSizeMode(value.single)),
             const SizedBox(height: 8),
             _textMetricsLabel(bubble),
-            _sliderRow(
-              '字体大小',
-              bubble.fontSize,
-              TextStyleLimits.minFontSize,
-              TextStyleLimits.maxFontSize,
-              (value) => _replaceBubble(bubble.copyWith(fontSize: value)),
-            ),
+            if (bubble.textSizeMode == TextSizeMode.fixed)
+              _sliderRow(
+                '字体大小',
+                bubble.fontSize,
+                TextStyleLimits.minFontSize,
+                TextStyleLimits.maxFontSize,
+                (value) {
+                  final current = _bubble;
+                  if (current == null || current.fontSize == value) return;
+                  _replaceBubble(current.copyWith(fontSize: value));
+                },
+              )
+            else
+              Padding(
+                  padding: const EdgeInsets.only(top: 4, bottom: 8),
+                  child: Text(
+                      trArgs('自动挡会在 {min}–{max} 内选取不溢出的最大字号', {
+                        'min': TextStyleLimits.minFontSize.toStringAsFixed(0),
+                        'max': TextStyleLimits.maxFontSize.toStringAsFixed(0),
+                      }),
+                      style: const TextStyle(
+                          fontSize: 11, color: AppColors.muted))),
             _sliderRow(
               '行间距',
               bubble.lineHeight,

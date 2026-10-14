@@ -270,7 +270,14 @@ void main() {
     expect(spec.strokeWidth, 0);
     expect(spec.textStrokeWidth, 20);
     expect(spec.letterSpacing, -10);
-    expect(spec.textSizeMode, TextSizeMode.fixed);
+    // Absent directives may stay null in the parsed spec so importing this
+    // draft cannot silently overwrite an existing manual object's mode.
+    final generated = const LayoutEngine()
+        .arrange(parsed.sections.single.captions,
+            imageWidth: 320, imageHeight: 200)
+        .single;
+    expect(generated.textSizeMode, TextSizeMode.fit);
+    expect(generated.fontSize, TextStyleLimits.maxFontSize);
     final old = parseCaptionScript('[001.png]\n@字号=40\n正文')
         .byFile['001.png']!
         .single
