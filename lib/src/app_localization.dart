@@ -1117,6 +1117,188 @@ const _translations = <String, Map<String, String>>{
 };
 
 const _workspaceTranslations = <String, Map<String, String>>{
+  '字体读取失败，未应用字号模式：{error}': {
+    'en': 'Could not load the font; the sizing mode was not applied: {error}',
+    'ja': 'フォントを読み込めなかったため、文字サイズモードを適用しませんでした：{error}',
+    'ko': '글꼴을 불러오지 못해 글자 크기 모드를 적용하지 않았습니다: {error}',
+    'zh_TW': '字體讀取失敗，未套用字號模式：{error}'
+  },
+  '项目已变化，未应用字号模式；默认设置已保存，请重试': {
+    'en':
+        'The project changed, so the sizing mode was not applied. Your defaults were saved; please retry.',
+    'ja': 'プロジェクトが変更されたため文字サイズモードを適用しませんでした。既定設定は保存済みです。もう一度お試しください。',
+    'ko': '프로젝트가 변경되어 글자 크기 모드를 적용하지 않았습니다. 기본 설정은 저장되었습니다. 다시 시도하세요.',
+    'zh_TW': '專案已變更，未套用字號模式；預設設定已儲存，請重試'
+  },
+  '设置读取失败：{error}': {
+    'en': 'Could not load settings: {error}',
+    'ja': '設定を読み込めませんでした：{error}',
+    'ko': '설정을 불러오지 못했습니다: {error}',
+    'zh_TW': '設定讀取失敗：{error}'
+  },
+  '统一项目字号模式': {
+    'en': 'Unify project sizing mode',
+    'ja': 'プロジェクトの文字サイズモードを統一',
+    'ko': '프로젝트 글자 크기 모드 통일',
+    'zh_TW': '統一專案字號模式'
+  },
+  '所有文字已使用此字号模式，无需修改': {
+    'en': 'All text already uses this sizing mode. No changes needed.',
+    'ja': 'すべての文字がこの文字サイズモードを使用中です。変更は不要です。',
+    'ko': '모든 텍스트가 이미 이 글자 크기 모드를 사용하고 있습니다. 변경이 필요하지 않습니다.',
+    'zh_TW': '所有文字已使用此字號模式，無需修改'
+  },
+  '已将 {count} 个文字对象切换字号模式，可撤销': {
+    'en': 'Changed the sizing mode of {count} text objects. You can undo this.',
+    'ja': '{count} 個の文字オブジェクトのサイズモードを変更しました。取り消せます。',
+    'ko': '텍스트 개체 {count}개의 글자 크기 모드를 변경했습니다. 실행 취소할 수 있습니다.',
+    'zh_TW': '已將 {count} 個文字物件切換字號模式，可復原'
+  },
+  '全局默认字号模式': {
+    'en': 'Global default sizing mode',
+    'ja': '文字サイズモードの全体既定値',
+    'ko': '전역 기본 글자 크기 모드',
+    'zh_TW': '全域預設字號模式'
+  },
+  '默认只影响新建及未指定模式的新脚本对象；不会改变已保存、复制或明确指定模式的对象。': {
+    'en':
+        'This default affects new objects and new script objects without an explicit mode only. Saved, duplicated and explicitly styled objects are unchanged.',
+    'ja':
+        '既定値は新規オブジェクトとモード未指定の新規スクリプトオブジェクトにのみ適用されます。保存済み、複製、モード指定済みのオブジェクトは変更しません。',
+    'ko':
+        '기본값은 새 개체와 모드가 지정되지 않은 새 스크립트 개체에만 적용됩니다. 저장·복제되었거나 모드가 명시된 개체는 변경하지 않습니다.',
+    'zh_TW': '預設只影響新增及未指定模式的新腳本物件；不會改變已儲存、複製或明確指定模式的物件。'
+  },
+  '新建对象手动字号（8–200）': {
+    'en': 'Manual size for new objects (8–200)',
+    'ja': '新規オブジェクトの手動文字サイズ（8–200）',
+    'ko': '새 개체의 수동 글자 크기(8–200)',
+    'zh_TW': '新增物件手動字號（8–200）'
+  },
+  '手动挡严格使用该字号；调整文字框不会自动缩放文字。': {
+    'en':
+        'Manual uses this exact size. Resizing the text box does not scale the text.',
+    'ja': '手動はこの文字サイズを維持します。文字枠を変更しても文字は自動拡大縮小されません。',
+    'ko': '수동 모드는 이 크기를 그대로 사용합니다. 텍스트 상자를 조정해도 글자가 자동으로 확대·축소되지 않습니다.',
+    'zh_TW': '手動檔嚴格使用該字號；調整文字框不會自動縮放文字。'
+  },
+  '请输入 8–200 之间的有效字号': {
+    'en': 'Enter a valid font size between 8 and 200.',
+    'ja': '8～200 の有効な文字サイズを入力してください。',
+    'ko': '8~200 사이의 유효한 글자 크기를 입력하세요.',
+    'zh_TW': '請輸入 8–200 之間的有效字號'
+  },
+  '同时应用到当前项目全部文字和气泡': {
+    'en': 'Also apply to all text and bubbles in the current project',
+    'ja': '現在のプロジェクトの全文字・吹き出しにも適用',
+    'ko': '현재 프로젝트의 모든 텍스트와 말풍선에도 적용',
+    'zh_TW': '同時套用到目前專案全部文字和氣泡'
+  },
+  '仅修改当前项目，可撤销，不改其他项目。自动挡上限200；切手动保留各对象当前可见字号，不使用上面的新建字号。实际改变的对象会解除文字样式关联。': {
+    'en':
+        'Changes only this project and can be undone. Auto uses a maximum of 200. Switching to Manual preserves each object’s visible size, not the new-object size above. Changed objects detach from linked text styles.',
+    'ja':
+        '現在のプロジェクトのみ変更し、取り消せます。自動の上限は200です。手動への切替は各オブジェクトの表示サイズを保持し、上記の新規用サイズは使いません。変更対象の文字スタイル連動は解除されます。',
+    'ko':
+        '현재 프로젝트만 변경하며 실행 취소할 수 있습니다. 자동의 최대 크기는 200입니다. 수동 전환 시 위의 새 개체 크기가 아니라 각 개체의 현재 표시 크기를 유지합니다. 변경된 개체는 텍스트 스타일 연결이 해제됩니다.',
+    'zh_TW':
+        '僅修改目前專案，可復原，不改其他專案。自動檔上限200；切手動保留各物件目前可見字號，不使用上面的新增字號。實際改變的物件會解除文字樣式關聯。'
+  },
+  '保存设置失败：{error}': {
+    'en': 'Could not save settings: {error}',
+    'ja': '設定を保存できませんでした：{error}',
+    'ko': '설정을 저장하지 못했습니다: {error}',
+    'zh_TW': '儲存設定失敗：{error}'
+  },
+  '正在保存设置…': {
+    'en': 'Saving settings…',
+    'ja': '設定を保存中…',
+    'ko': '설정 저장 중…',
+    'zh_TW': '正在儲存設定…'
+  },
+  '字号模式': {
+    'en': 'Sizing mode',
+    'ja': '文字サイズモード',
+    'ko': '글자 크기 모드',
+    'zh_TW': '字號模式'
+  },
+  '全部图片（整个项目）': {
+    'en': 'All images (entire project)',
+    'ja': 'すべての画像（プロジェクト全体）',
+    'ko': '모든 이미지(전체 프로젝트)',
+    'zh_TW': '全部圖片（整個專案）'
+  },
+  '当前图片全部对象': {
+    'en': 'All objects in the current image',
+    'ja': '現在の画像内のすべてのオブジェクト',
+    'ko': '현재 이미지의 모든 개체',
+    'zh_TW': '目前圖片全部物件'
+  },
+  '指定多张图片全部对象': {
+    'en': 'All objects in selected images',
+    'ja': '指定した画像内のすべてのオブジェクト',
+    'ko': '선택한 이미지의 모든 개체',
+    'zh_TW': '指定多張圖片全部物件'
+  },
+  '章节文本中勾选的对象': {
+    'en': 'Objects checked in chapter text',
+    'ja': '章のテキストで選択したオブジェクト',
+    'ko': '챕터 텍스트에서 체크한 개체',
+    'zh_TW': '章節文字中勾選的物件'
+  },
+  '仅实际修改对象解除文字样式关联；未改变对象保持关联。': {
+    'en':
+        'Only changed objects are detached from linked text styles; unchanged objects keep their links.',
+    'ja': '実際に変更したオブジェクトのみ文字スタイルの連動を解除します。未変更のオブジェクトは連動を維持します。',
+    'ko': '실제로 변경된 개체만 텍스트 스타일 연결이 해제됩니다. 변경되지 않은 개체는 연결을 유지합니다.',
+    'zh_TW': '僅實際修改物件解除文字樣式關聯；未改變物件保持關聯。'
+  },
+  '来源当前可见字号：{size}': {
+    'en': 'Source visible font size: {size}',
+    'ja': '元の現在の表示文字サイズ：{size}',
+    'ko': '원본의 현재 표시 글자 크기: {size}',
+    'zh_TW': '來源目前可見字號：{size}'
+  },
+  '已选择自动挡：字体大小不参与批量应用，上限统一为 {limit}。': {
+    'en':
+        'Auto selected: font size is excluded from bulk formatting; the maximum is always {limit}.',
+    'ja': '自動を選択中：文字サイズは一括適用から除外され、上限は常に {limit} です。',
+    'ko': '자동 선택됨: 글자 크기는 일괄 적용에서 제외되며 최대 크기는 항상 {limit}입니다.',
+    'zh_TW': '已選擇自動檔：字體大小不參與批次套用，上限統一為 {limit}。'
+  },
+  '只对手动挡生效；要统一手动字号，请勾选字号模式并选择手动挡。': {
+    'en':
+        'Applies only to Manual objects. To unify manual sizes, check Sizing mode and choose Manual.',
+    'ja': '手動のオブジェクトにのみ有効です。文字サイズを統一するには、文字サイズモードを選択して手動にしてください。',
+    'ko': '수동 개체에만 적용됩니다. 수동 크기를 통일하려면 글자 크기 모드를 체크하고 수동을 선택하세요.',
+    'zh_TW': '只對手動檔生效；要統一手動字號，請勾選字號模式並選擇手動檔。'
+  },
+  '自动挡统一上限 {limit}，字体大小由各对象文字框自动计算。': {
+    'en':
+        'Auto always uses a maximum of {limit}; each object fits its own text box.',
+    'ja': '自動の上限は常に {limit} で、各オブジェクトの文字枠に合わせてサイズを計算します。',
+    'ko': '자동의 최대 크기는 항상 {limit}이며 각 개체의 텍스트 상자에 맞게 계산됩니다.',
+    'zh_TW': '自動檔統一上限 {limit}，字體大小由各物件文字框自動計算。'
+  },
+  '手动挡：未勾选字体大小时，自动挡对象冻结当前可见字号；手动挡对象保持原字号。': {
+    'en':
+        'Manual: without Font size checked, Auto objects keep their current visible size and Manual objects keep their own size.',
+    'ja': '手動：文字サイズを選択しなければ、自動のオブジェクトは現在の表示サイズで固定され、手動のオブジェクトは元のサイズを維持します。',
+    'ko': '수동: 글자 크기를 체크하지 않으면 자동 개체는 현재 표시 크기로 고정되고 수동 개체는 원래 크기를 유지합니다.',
+    'zh_TW': '手動檔：未勾選字體大小時，自動檔物件凍結目前可見字號；手動檔物件保持原字號。'
+  },
+  '所选属性没有实际变化，项目保持不变。': {
+    'en': 'No selected properties changed. The project is unchanged.',
+    'ja': '選択した属性に実際の変更はなく、プロジェクトは変更されませんでした。',
+    'ko': '선택한 속성에 실제 변경이 없어 프로젝트가 유지되었습니다.',
+    'zh_TW': '所選屬性沒有實際變化，專案保持不變。'
+  },
+  '已将 {properties} 项属性应用到 {objects} 个对象': {
+    'en': 'Applied {properties} properties to {objects} changed objects',
+    'ja': '{properties} 個の属性を変更対象 {objects} 個に適用しました',
+    'ko': '{properties}개 속성을 실제 변경된 {objects}개 개체에 적용했습니다',
+    'zh_TW': '已將 {properties} 項屬性套用到 {objects} 個物件'
+  },
   '手动挡': {'en': 'Manual', 'ja': '手動', 'ko': '수동', 'zh_TW': '手動檔'},
   '自动挡': {'en': 'Auto', 'ja': '自動', 'ko': '자동', 'zh_TW': '自動檔'},
   '自动挡 · 上限 {limit} · 实际字号 {size}': {

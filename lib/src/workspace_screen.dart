@@ -163,6 +163,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   bool _structureDirty = false;
   int _editRevision = 0;
   AppSettings _settings = const AppSettings();
+  late final Future<void> _settingsReady;
   final List<String> _importedFonts = [];
   final Map<String, Uint8List> _fontBytes = {};
   String? _projectThumbnailBase64;
@@ -208,8 +209,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     WidgetsBinding.instance.addObserver(this);
     _projectName = widget.projectName;
     _activeProjectId = widget.projectId;
+    _settingsReady = _loadSettings();
     _loadStoredProject();
-    _loadSettings();
     _loadStickerAssets();
     unawaited(FontLibrary.instance.load().catchError((Object e) {
       if (mounted) {
@@ -235,14 +236,105 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   }
 
   Future<void> _loadSettings() async {
-    _settings = await loadAppSettings();
+    try {
+      _settings = await loadAppSettings();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            _quickFeedback(trArgs('设置读取失败：{error}', {'error': error})));
+      }
+    }
     if (mounted) setState(() {});
   }
 
   Future<void> _showSettings() async {
-    final settings = await showAppSettingsDialog(context, _settings);
-    if (settings == null || !mounted) return;
-    setState(() => _settings = settings);
+    await _settingsReady;
+    if (!mounted) return;
+    final result = await showAppSettingsDialog(context, _settings,
+        canApplyTextSizeModeToCurrentProject:
+            _pages.any((page) => page.placements.isNotEmpty));
+    if (result == null || !mounted) return;
+    setState(() => _settings = result.settings);
+    if (result.applyTextSizeModeToCurrentProject) {
+      await _applyDefaultTextSizeModeToProject();
+    }
+  }
+
+  Future<void> _applyDefaultTextSizeModeToProject() async {
+    _finishEdit();
+    final revision = _editRevision;
+    final projectId = _activeProjectId;
+    final mode = _settings.defaultTextSizeMode;
+    bool interrupted() {
+      if (!mounted) return true;
+      if (revision == _editRevision && projectId == _activeProjectId) {
+        return false;
+      }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(_quickFeedback('项目已变化，未应用字号模式；默认设置已保存，请重试'));
+      return true;
+    }
+
+    final updates = <ImagePage, List<BubblePlacement>>{};
+    final loadedFonts = <String>{};
+    var changed = 0;
+    var measured = 0;
+    for (final page in _pages.toList()) {
+      final placements = <BubblePlacement>[];
+      var pageChanged = false;
+      for (final bubble in page.placements) {
+        var size = bubble.fontSize;
+        if (mode == TextSizeMode.fit) {
+          size = TextStyleLimits.maxFontSize;
+        } else if (bubble.textSizeMode == TextSizeMode.fit) {
+          final fontKey = '${bubble.fontAssetId ?? ''}|${bubble.fontFamily}';
+          if (loadedFonts.add(fontKey)) {
+            try {
+              await FontLibrary.instance
+                  .resolve(bubble.fontFamily, assetId: bubble.fontAssetId);
+            } catch (error) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(_quickFeedback(
+                    trArgs('字体读取失败，未应用字号模式：{error}', {'error': error})));
+              }
+              return;
+            }
+            if (interrupted()) return;
+          }
+          final layout = const TextLayoutService().layout(bubble);
+          size = layout.effectiveFontSize;
+          layout.dispose();
+        }
+        if (bubble.textSizeMode == mode && bubble.fontSize == size) {
+          placements.add(bubble);
+        } else {
+          placements.add(bubble.copyWith(
+              textSizeMode: mode, fontSize: size, styleId: null));
+          pageChanged = true;
+          changed++;
+        }
+        if (++measured % 24 == 0) {
+          // Yield between pages/objects, but never commit a stale snapshot.
+          await Future<void>.delayed(Duration.zero);
+          if (interrupted()) return;
+        }
+      }
+      if (pageChanged) updates[page] = placements;
+    }
+    if (!mounted || interrupted()) return;
+    if (changed > 0) {
+      _remember(label: '统一项目字号模式');
+      setState(() {
+        for (final entry in updates.entries) {
+          entry.key.placements = entry.value;
+          entry.key.approved = false;
+        }
+        _markDirty();
+      });
+    }
+    ScaffoldMessenger.of(context).showSnackBar(_quickFeedback(changed == 0
+        ? '所有文字已使用此字号模式，无需修改'
+        : trArgs('已将 {count} 个文字对象切换字号模式，可撤销', {'count': changed})));
   }
 
   Future<T?> _showTextDialog<T>(TextEditingController controller,
@@ -561,6 +653,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
 
   Future<void> _loadStoredProject() async {
     try {
+      await _settingsReady;
+      if (!mounted) return;
       final manifest = supportsIncrementalProjectStorage
           ? await loadLocalProjectManifest(_activeProjectId)
           : null;
@@ -1031,6 +1125,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
           incoming,
           imageWidth: page.originalWidth,
           imageHeight: page.originalHeight,
+          defaultTextSizeMode: _settings.defaultTextSizeMode,
+          defaultManualFontSize: _settings.defaultManualFontSize,
         );
         final oldPlacements = page.placements;
         final placements = baselineSource == null
@@ -1384,7 +1480,22 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
 
   Future<void> _applySelectedStyleToAll(BubblePlacement source) async {
     final selected = <_BubbleStyleProperty>{};
-    var scope = 'page';
+    var scope = 'all';
+    var selectedTextSizeMode = TextSizeMode.fit;
+    double visibleFontSize(BubblePlacement bubble) {
+      if (bubble.textSizeMode == TextSizeMode.fixed) return bubble.fontSize;
+      final layout = const TextLayoutService().layout(bubble);
+      final size = layout.effectiveFontSize;
+      layout.dispose();
+      return size;
+    }
+
+    final sourceFontSize = visibleFontSize(source);
+    final propertyOrder = [
+      _BubbleStyleProperty.textSizeMode,
+      ..._BubbleStyleProperty.values
+          .where((property) => property != _BubbleStyleProperty.textSizeMode),
+    ];
     final chosenPageIds = <String>{if (_page != null) _page!.pageId};
     final labels = <_BubbleStyleProperty, String>{
       _BubbleStyleProperty.fontFamily: '字体',
@@ -1412,15 +1523,17 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
             child: Column(
               children: [
                 DropdownButton<String>(
+                    key: const ValueKey('bulk-style-scope'),
                     value: scope,
                     isExpanded: true,
-                    items: const [
-                      DropdownMenuItem(value: 'page', child: Text('当前图片全部对象')),
+                    items: [
                       DropdownMenuItem(
-                          value: 'pages', child: Text('指定多张图片全部对象')),
+                          value: 'all', child: LText('全部图片（整个项目）')),
+                      DropdownMenuItem(value: 'page', child: LText('当前图片全部对象')),
                       DropdownMenuItem(
-                          value: 'selected', child: Text('章节文本中勾选的对象')),
-                      DropdownMenuItem(value: 'all', child: Text('整个章节全部对象'))
+                          value: 'pages', child: LText('指定多张图片全部对象')),
+                      DropdownMenuItem(
+                          value: 'selected', child: LText('章节文本中勾选的对象')),
                     ],
                     onChanged: (v) => setDialogState(() => scope = v!)),
                 if (scope == 'pages')
@@ -1485,9 +1598,12 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                 Row(
                   children: [
                     TextButton(
-                      onPressed: () => setDialogState(
-                        () => selected.addAll(_BubbleStyleProperty.values),
-                      ),
+                      onPressed: () => setDialogState(() {
+                        selected.addAll(_BubbleStyleProperty.values);
+                        if (selectedTextSizeMode == TextSizeMode.fit) {
+                          selected.remove(_BubbleStyleProperty.fontSize);
+                        }
+                      }),
                       child: LText('全选'),
                     ),
                     TextButton(
@@ -1498,32 +1614,103 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
                     LText('已选 ${selected.length} 项'),
                   ],
                 ),
+                Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: LText('仅实际修改对象解除文字样式关联；未改变对象保持关联。',
+                        style: const TextStyle(
+                            fontSize: 11, color: AppColors.muted))),
                 const Divider(height: 1),
                 Expanded(
                   child: ListView(
                     children: [
-                      for (final property in _BubbleStyleProperty.values)
+                      for (final property in propertyOrder) ...[
                         CheckboxListTile(
+                          key: ValueKey('bulk-style-property-${property.name}'),
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                           value: selected.contains(property),
                           title: LText(labels[property]!),
                           subtitle: property == _BubbleStyleProperty.fontSize
                               ? Text(
-                                  trArgs('自动挡统一上限 {limit}；手动字号仅在手动挡生效', {
-                                    'limit': TextStyleLimits.maxFontSize
-                                        .toStringAsFixed(0),
-                                  }),
+                                  '${trArgs('来源当前可见字号：{size}', {
+                                        'size':
+                                            sourceFontSize.toStringAsFixed(2),
+                                      })}\n${selected.contains(_BubbleStyleProperty.textSizeMode) && selectedTextSizeMode == TextSizeMode.fit ? trArgs('已选择自动挡：字体大小不参与批量应用，上限统一为 {limit}。', {
+                                          'limit': TextStyleLimits.maxFontSize
+                                              .toStringAsFixed(0),
+                                        }) : tr('只对手动挡生效；要统一手动字号，请勾选字号模式并选择手动挡。')}',
                                   style: const TextStyle(fontSize: 11))
                               : null,
-                          onChanged: (checked) => setDialogState(() {
-                            if (checked == true) {
-                              selected.add(property);
-                            } else {
-                              selected.remove(property);
-                            }
-                          }),
+                          onChanged:
+                              property == _BubbleStyleProperty.fontSize &&
+                                      selected.contains(
+                                          _BubbleStyleProperty.textSizeMode) &&
+                                      selectedTextSizeMode == TextSizeMode.fit
+                                  ? null
+                                  : (checked) => setDialogState(() {
+                                        if (checked == true) {
+                                          selected.add(property);
+                                          if (property ==
+                                                  _BubbleStyleProperty
+                                                      .textSizeMode &&
+                                              selectedTextSizeMode ==
+                                                  TextSizeMode.fit) {
+                                            selected.remove(
+                                                _BubbleStyleProperty.fontSize);
+                                          }
+                                        } else {
+                                          selected.remove(property);
+                                        }
+                                      }),
                         ),
+                        if (property == _BubbleStyleProperty.textSizeMode &&
+                            selected.contains(property))
+                          Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    SegmentedButton<TextSizeMode>(
+                                        key: const ValueKey(
+                                            'bulk-style-mode-selector'),
+                                        showSelectedIcon: false,
+                                        segments: [
+                                          ButtonSegment(
+                                              value: TextSizeMode.fixed,
+                                              label: LText('手动挡')),
+                                          ButtonSegment(
+                                              value: TextSizeMode.fit,
+                                              label: LText('自动挡')),
+                                        ],
+                                        selected: {selectedTextSizeMode},
+                                        onSelectionChanged: (value) =>
+                                            setDialogState(() {
+                                              selectedTextSizeMode =
+                                                  value.single;
+                                              if (selectedTextSizeMode ==
+                                                  TextSizeMode.fit) {
+                                                selected.remove(
+                                                    _BubbleStyleProperty
+                                                        .fontSize);
+                                              }
+                                            })),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                        selectedTextSizeMode == TextSizeMode.fit
+                                            ? trArgs(
+                                                '自动挡统一上限 {limit}，字体大小由各对象文字框自动计算。',
+                                                {
+                                                    'limit': TextStyleLimits
+                                                        .maxFontSize
+                                                        .toStringAsFixed(0),
+                                                  })
+                                            : tr(
+                                                '手动挡：未勾选字体大小时，自动挡对象冻结当前可见字号；手动挡对象保持原字号。'),
+                                        style: const TextStyle(
+                                            fontSize: 11,
+                                            color: AppColors.muted)),
+                                  ])),
+                      ],
                     ],
                   ),
                 ),
@@ -1547,8 +1734,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     );
     if (confirmed != true || !mounted) return;
     _finishEdit();
-    _remember(label: '批量应用样式');
-    var changed = 0;
+    final changes = <({ImagePage page, int index, BubblePlacement bubble})>[];
+    final applyMode = selected.contains(_BubbleStyleProperty.textSizeMode);
     for (final page in _pages) {
       if (scope == 'page' && page != _page) continue;
       if (scope == 'pages' && !chosenPageIds.contains(page.pageId)) continue;
@@ -1556,7 +1743,19 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
         final target = page.placements[i];
         if (scope == 'selected' &&
             !_multiSelected.contains(target.caption.bubbleId)) continue;
-        page.placements[i] = target.copyWith(
+        final nextMode = applyMode ? selectedTextSizeMode : target.textSizeMode;
+        double? nextFontSize;
+        if (applyMode && nextMode == TextSizeMode.fit) {
+          nextFontSize = TextStyleLimits.maxFontSize;
+        } else if (selected.contains(_BubbleStyleProperty.fontSize) &&
+            nextMode == TextSizeMode.fixed) {
+          nextFontSize = sourceFontSize;
+        } else if (applyMode &&
+            nextMode == TextSizeMode.fixed &&
+            target.textSizeMode == TextSizeMode.fit) {
+          nextFontSize = visibleFontSize(target);
+        }
+        final next = target.copyWith(
           fontFamily: selected.contains(_BubbleStyleProperty.fontFamily)
               ? source.fontFamily
               : null,
@@ -1569,9 +1768,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
           fontColorValue: selected.contains(_BubbleStyleProperty.fontColor)
               ? source.fontColorValue
               : null,
-          fontSize: selected.contains(_BubbleStyleProperty.fontSize)
-              ? source.fontSize
-              : null,
+          fontSize: nextFontSize,
           lineHeight: selected.contains(_BubbleStyleProperty.lineHeight)
               ? source.lineHeight
               : null,
@@ -1584,9 +1781,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
           tailDirection: selected.contains(_BubbleStyleProperty.tailDirection)
               ? source.tailDirection
               : null,
-          textSizeMode: selected.contains(_BubbleStyleProperty.textSizeMode)
-              ? source.textSizeMode
-              : null,
+          textSizeMode: applyMode ? selectedTextSizeMode : null,
           letterSpacing: selected.contains(_BubbleStyleProperty.letterSpacing)
               ? source.letterSpacing
               : null,
@@ -1601,19 +1796,48 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
               selected.contains(_BubbleStyleProperty.textStrokeColor)
                   ? source.textStrokeColorValue
                   : null,
-          // Selective formatting detaches the target to avoid a misleading linked style.
-          styleId: null,
           fillOpacity: selected.contains(_BubbleStyleProperty.fillOpacity)
               ? source.fillOpacity
               : null,
         );
-        page.approved = false;
-        changed++;
+        final unchanged = target.fontFamily == next.fontFamily &&
+            target.fontAssetId == next.fontAssetId &&
+            target.fontDisplayName == next.fontDisplayName &&
+            target.fontColorValue == next.fontColorValue &&
+            target.fontSize == next.fontSize &&
+            target.lineHeight == next.lineHeight &&
+            target.strokeWidth == next.strokeWidth &&
+            target.shape == next.shape &&
+            target.tailDirection == next.tailDirection &&
+            target.textSizeMode == next.textSizeMode &&
+            target.letterSpacing == next.letterSpacing &&
+            target.textAlign == next.textAlign &&
+            target.textStrokeWidth == next.textStrokeWidth &&
+            target.textStrokeColorValue == next.textStrokeColorValue &&
+            target.fillOpacity == next.fillOpacity;
+        if (unchanged) continue;
+        // Only real formatting changes detach a linked style. A no-op must not
+        // change styleId, approval, undo history, or the saved revision.
+        changes
+            .add((page: page, index: i, bubble: next.copyWith(styleId: null)));
       }
+    }
+    if (changes.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(_quickFeedback('所选属性没有实际变化，项目保持不变。'));
+      return;
+    }
+    _remember(label: '批量应用样式');
+    for (final change in changes) {
+      change.page.placements[change.index] = change.bubble;
+      change.page.approved = false;
     }
     setState(_markDirty);
     ScaffoldMessenger.of(context).showSnackBar(
-      _quickFeedback('已将 ${selected.length} 项属性应用到 $changed 个气泡'),
+      _quickFeedback(trArgs('已将 {properties} 项属性应用到 {objects} 个对象', {
+        'properties': selected.length,
+        'objects': changes.length,
+      })),
     );
   }
 
@@ -1904,8 +2128,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     final bubble = BubblePlacement(
       caption: caption,
       shape: shape,
-      fontSize: TextStyleLimits.maxFontSize,
-      textSizeMode: TextSizeMode.fit,
+      fontSize: _settings.defaultTextSizeMode == TextSizeMode.fit
+          ? TextStyleLimits.maxFontSize
+          : _settings.defaultManualFontSize,
+      textSizeMode: _settings.defaultTextSizeMode,
       x: (page.originalWidth * .08 + offset).clamp(
         0,
         page.originalWidth - width,
