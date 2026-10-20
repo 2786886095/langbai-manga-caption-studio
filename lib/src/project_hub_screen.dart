@@ -192,13 +192,35 @@ class _ProjectHubScreenState extends State<ProjectHubScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final settings = await loadAppSettings();
-    if (mounted) setState(() => _settings = settings);
+    try {
+      final settings = await loadAppSettings();
+      if (mounted) setState(() => _settings = settings);
+    } catch (error) {
+      _showSettingsLoadError(error);
+    }
   }
 
   Future<void> _showSettings() async {
-    final settings = await showAppSettingsDialog(context, _settings);
-    if (settings != null && mounted) setState(() => _settings = settings);
+    try {
+      final settings = await loadAppSettings();
+      if (!mounted) return;
+      setState(() => _settings = settings);
+    } catch (error) {
+      // Keep the last confirmed defaults available when storage is temporarily
+      // unavailable; a failed read must not make the settings entry unusable.
+      _showSettingsLoadError(error);
+    }
+    if (!mounted) return;
+    final result = await showAppSettingsDialog(context, _settings);
+    if (result != null && mounted) setState(() => _settings = result.settings);
+  }
+
+  void _showSettingsLoadError(Object error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(trArgs('设置读取失败：{error}', {'error': error})),
+      duration: const Duration(seconds: 3),
+    ));
   }
 
   Future<void> _refresh() async {

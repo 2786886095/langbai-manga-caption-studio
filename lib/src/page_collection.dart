@@ -40,6 +40,14 @@ List<BubblePlacement> preserveEditedPlacements(
             layout.positionPreset != null);
     final retained =
         previous ?? (id.isEmpty && i < existing.length ? existing[i] : null);
+    if (retained != null && hasExplicitGeometry) {
+      // A default is for new objects, not an implicit style edit when an
+      // existing script object only supplies fresh geometry.
+      result[i] = result[i].copyWith(
+        textSizeMode: layout.textSizeMode ?? retained.textSizeMode,
+        fontSize: layout.fontSize ?? retained.fontSize,
+      );
+    }
     if (retained != null && !hasExplicitGeometry) {
       // Keep manual placement, but explicit style directives are authoritative.
       result[i] = retained.copyWith(

@@ -9,6 +9,8 @@ class LayoutEngine {
     List<CaptionLine> captions, {
     required int imageWidth,
     required int imageHeight,
+    TextSizeMode defaultTextSizeMode = TextSizeMode.fit,
+    double defaultManualFontSize = 34,
   }) {
     if (captions.isEmpty) return const [];
     final margin = imageWidth * .045;
@@ -79,8 +81,12 @@ class LayoutEngine {
           fontAssetId: spec?.fontAssetId,
           styleId: spec?.styleId,
           fontColorValue: spec?.fontColorValue ?? 0xff141518,
-          fontSize: spec?.fontSize ?? TextStyleLimits.maxFontSize,
-          textSizeMode: spec?.textSizeMode ?? TextSizeMode.fit,
+          fontSize: spec?.fontSize ??
+              ((spec?.textSizeMode ?? defaultTextSizeMode) == TextSizeMode.fit
+                  ? TextStyleLimits.maxFontSize
+                  : defaultManualFontSize.clamp(TextStyleLimits.minFontSize,
+                      TextStyleLimits.maxFontSize)),
+          textSizeMode: spec?.textSizeMode ?? defaultTextSizeMode,
           textStrokeWidth: spec?.textStrokeWidth ?? 0,
           textStrokeColorValue: spec?.textStrokeColorValue ?? 0xff000000,
           letterSpacing: spec?.letterSpacing ?? 0,
